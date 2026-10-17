@@ -65,7 +65,7 @@ with (Path('output')/(kind+'-open.log')).open('w') as log:
             time.sleep(1)
     print('Safari ready:',p.exists() and 'page-ready' in p.read_text(),flush=True)
 PY
-  python3 bounded.py 45 output/injector "$(xcode-select -p)" "$udid" >"output/$kind-injector.log" 2>&1 || true
+  python3 bounded.py 90 output/injector "$(xcode-select -p)" "$udid" >"output/$kind-injector.log" 2>&1 || true
   head -35 "output/$kind-injector.log"
   sleep 2
   python3 bounded.py 20 xcrun simctl io "$udid" screenshot "output/$kind-after.png" >"output/$kind-screenshot.log" 2>&1 || true
