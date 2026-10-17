@@ -72,6 +72,12 @@ static void tryIndependentMouse(xpc_connection_t c,NSString *service){
     xpc_dictionary_set_value(storage,"DeviceTypeHint",codedString("Mouse"));
     xpc_dictionary_set_value(storage,"Transport",codedString("CoreDevice"));
     xpc_dictionary_set_value(storage,"PrimaryUsagePage",codedInt(1));xpc_dictionary_set_value(storage,"PrimaryUsage",codedInt(2));
+    // Match the typed usage-pair storage returned by connectedServices.
+    // The service derives primary usage from this array during decoding.
+    xpc_object_t codedPair=dict(),pairFields=dict(),codedPairs=dict(),pairArray=xpc_array_create(NULL,0);
+    xpc_dictionary_set_value(pairFields,"DeviceUsagePage",codedInt(1));xpc_dictionary_set_value(pairFields,"DeviceUsage",codedInt(2));
+    xpc_dictionary_set_value(codedPair,"dictionary",pairFields);xpc_array_append_value(pairArray,codedPair);
+    xpc_dictionary_set_value(codedPairs,"array",pairArray);xpc_dictionary_set_value(storage,"DeviceUsagePairs",codedPairs);
     xpc_object_t idvalue=dict();xpc_dictionary_set_uint64(idvalue,"uint",0xff0001);xpc_dictionary_set_value(storage,"_ServiceID",idvalue);
     xpc_dictionary_set_value(descriptor,"_CoreDevice_codablePropertyStorage",storage);
     xpc_object_t body=dict();xpc_dictionary_set_value(body,"_0",descriptor);request(c,envelope(service,operation("createService",body)));
