@@ -6,6 +6,8 @@ kit=dev.parent/'SharedFrameworks/SimulatorKit.framework/SimulatorKit'
 if not kit.exists():kit=dev/'Library/PrivateFrameworks/SimulatorKit.framework/SimulatorKit'
 out=Path(__file__).resolve().parent/'output';out.mkdir(exist_ok=True)
 (out/'binary-info.txt').write_text(subprocess.check_output(['file',str(kit)],text=True))
+strings=subprocess.check_output(['strings',str(kit)],text=True)
+(out/'hid-transport-strings.txt').write_text('\n'.join(s for s in strings.splitlines() if any(t.lower() in s.lower() for t in ['IndigoPointer','IndigoMouse','DTUHID','remote.hid','sendWithMessage','PointerService','MouseService','pointerEvent','mouseEvent','scrollEvent'])))
 for name in ['IndigoHIDMessageForPointerEventFromHIDEventRef','IndigoHIDMessageForScrollEventFromHIDEventRef','IndigoHIDMessageToCreatePointerService','IndigoHIDMessageToCreateMouseService','_hidEventFilterCallback']:
     p=subprocess.Popen(['xcrun','otool','-tvV',str(kit)],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
     lines=[]
@@ -14,7 +16,7 @@ for name in ['IndigoHIDMessageForPointerEventFromHIDEventRef','IndigoHIDMessageF
         if not lines:continue
         if line.rstrip().endswith(':'):break
         lines.append(line)
-        if len(lines)>=240:break
+        if len(lines)>=520:break
     p.terminate()
     try:p.wait(timeout=10)
     except subprocess.TimeoutExpired:p.kill();p.wait()
