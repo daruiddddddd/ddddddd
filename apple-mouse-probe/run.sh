@@ -90,7 +90,7 @@ PY
     continue
   fi
   if [[ "$kind" == "iphone" ]]; then
-    if [[ "${PROBE_FOCUS:-}" == "native-policy" ]]; then
+    if [[ "${PROBE_FOCUS:-}" == "native-policy" || "${PROBE_FOCUS:-}" == "native-repeat" ]]; then
       python3 bounded.py 35 xcrun simctl spawn "$udid" "$(pwd)/output/accessibility-setup" 1 >"output/$kind-accessibility-setup.log" 2>&1 || true
       sleep 20
     else
@@ -103,9 +103,11 @@ PY
     sleep 20
     fi
   fi
-  if [[ "${PROBE_FOCUS:-}" == "native-policy" ]]; then
+  if [[ "${PROBE_FOCUS:-}" == "native-policy" || "${PROBE_FOCUS:-}" == "native-repeat" ]]; then
     python3 bounded.py 45 xcrun simctl install "$udid" output/NativeProbe.app >"output/$kind-native-install.log" 2>&1 || python3 bounded.py 45 xcrun simctl install "$udid" output/NativeProbe.app >>"output/$kind-native-install.log" 2>&1
-    for phase in policy-default policy-direct; do
+    phases=(policy-default policy-direct)
+    if [[ "${PROBE_FOCUS:-}" == "native-repeat" ]]; then phases=(repeat-first repeat-reused repeat-recreated);fi
+    for phase in "${phases[@]}"; do
       if [[ "$phase" == "policy-direct" ]]; then
         python3 bounded.py 30 xcrun simctl launch "$udid" org.jwprobe.nativeinput --probe-phase "$phase" --direct-buttons >"output/$kind-$phase-launch.log" 2>&1
       else
@@ -120,7 +122,13 @@ for _ in range(30):
     time.sleep(1)
 print('Native policy page ready:',p.exists() and 'page-ready' in p.read_text(),flush=True)
 PY
-      PROBE_DEVICE="$kind-$phase" python3 bounded.py 90 output/injector "$(xcode-select -p)" "$udid" >"output/$kind-$phase-injector.log" 2>&1 || true
+      if [[ "$phase" == "repeat-first" ]]; then
+        PROBE_KEEP_SERVICES=1 PROBE_DEVICE="$kind-$phase" python3 bounded.py 90 output/injector "$(xcode-select -p)" "$udid" >"output/$kind-$phase-injector.log" 2>&1 || true
+      elif [[ "$phase" == "repeat-reused" ]]; then
+        PROBE_KEEP_SERVICES=1 PROBE_REUSE_SERVICES=1 PROBE_DEVICE="$kind-$phase" python3 bounded.py 90 output/injector "$(xcode-select -p)" "$udid" >"output/$kind-$phase-injector.log" 2>&1 || true
+      else
+        PROBE_DEVICE="$kind-$phase" python3 bounded.py 90 output/injector "$(xcode-select -p)" "$udid" >"output/$kind-$phase-injector.log" 2>&1 || true
+      fi
       sleep 2
       container="$(xcrun simctl get_app_container "$udid" org.jwprobe.nativeinput data)"
       cp "$container/Documents/native-events.jsonl" "output/$kind-$phase-api.jsonl"
