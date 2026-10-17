@@ -6,6 +6,7 @@
 
 static NSFileHandle *logFile;
 static NSMutableSet<GCMouse *> *observedMice;
+static NSMutableDictionary<NSValue *,NSNumber *> *buttonStates;
 static WKWebView *bridgeView;
 static CGPoint bridgePoint;
 static BOOL hasBridgePoint=NO;
@@ -30,19 +31,26 @@ static void bridge(NSDictionary *data) {
 static NSUInteger buttons(GCMouseInput *input) {
     return (input.leftButton.isPressed?1:0)|(input.rightButton.isPressed?2:0)|(input.middleButton.isPressed?4:0);
 }
+static NSUInteger receivedButtons(GCMouseInput *input){return [buttonStates[[NSValue valueWithNonretainedObject:input]] unsignedIntegerValue];}
 static void observeMouse(GCMouse *mouse) {
     if(!mouse || [observedMice containsObject:mouse])return;
     [observedMice addObject:mouse]; mouse.handlerQueue=dispatch_get_main_queue();
     record(@{@"source":@"GCMouse",@"type":@"connected",@"category":mouse.productCategory?:@"",@"vendor":mouse.vendorName?:@""});
     GCMouseInput *input=mouse.mouseInput;
-    input.mouseMovedHandler=^(GCMouseInput *m,float dx,float dy){ record(@{@"source":@"GCMouse",@"type":@"move",@"dx":@(dx),@"dy":@(dy),@"buttons":@(buttons(m))}); };
+    buttonStates[[NSValue valueWithNonretainedObject:input]]=@(buttons(input));
+    input.mouseMovedHandler=^(GCMouseInput *m,float dx,float dy){ record(@{@"source":@"GCMouse",@"type":@"move",@"dx":@(dx),@"dy":@(dy),@"buttons":@(receivedButtons(m))}); };
     for(NSDictionary *entry in @[@{@"name":@"left",@"button":input.leftButton?:NSNull.null},@{@"name":@"right",@"button":input.rightButton?:NSNull.null},@{@"name":@"middle",@"button":input.middleButton?:NSNull.null}]) {
         if(entry[@"button"]==NSNull.null)continue;
         GCControllerButtonInput *button=entry[@"button"];
         NSString *name=entry[@"name"];
         button.pressedChangedHandler=^(GCControllerButtonInput *b,float value,BOOL pressed){
-            bridgeButtons=buttons(input);
-            record(@{@"source":@"GCMouse",@"type":@"button",@"name":name,@"pressed":@(pressed),@"value":@(value),@"buttons":@(bridgeButtons)});
+            // Use the delivered edge, not a later poll of the device. UIKit can
+            // queue callbacks while rendering, so isPressed may already differ.
+            NSUInteger bit=[name isEqualToString:@"left"]?1:[name isEqualToString:@"right"]?2:4;
+            NSUInteger previous=receivedButtons(input);
+            bridgeButtons=pressed?(previous|bit):(previous&~bit);
+            buttonStates[[NSValue valueWithNonretainedObject:input]]=@(bridgeButtons);
+            record(@{@"source":@"GCMouse",@"type":@"button",@"name":name,@"pressed":@(pressed),@"value":@(value),@"buttons":@(bridgeButtons),@"polledButtons":@(buttons(input))});
             bridge(@{@"type":@"native-button",@"api":@"GCMouse",@"name":name,@"pressed":@(pressed)});
         };
     }
@@ -98,7 +106,7 @@ static void observeMouse(GCMouse *mouse) {
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)options {
     NSString *path=[NSSearchPathForDirectoriesInDomains(NSDocumentDirectory,NSUserDomainMask,YES).firstObject stringByAppendingPathComponent:@"native-events.jsonl"];
     [NSFileManager.defaultManager createFileAtPath:path contents:nil attributes:nil];
-    logFile=[NSFileHandle fileHandleForWritingAtPath:path]; observedMice=[NSMutableSet set];
+    logFile=[NSFileHandle fileHandleForWritingAtPath:path]; observedMice=[NSMutableSet set]; buttonStates=[NSMutableDictionary dictionary];
     return YES;
 }
 @end
