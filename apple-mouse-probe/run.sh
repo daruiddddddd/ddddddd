@@ -28,7 +28,7 @@ Path('output/plan.tsv').write_text(''.join(f"{p['kind']}\t{p['udid']}\n" for p i
 if len(plan)!=(1 if os.environ.get('PROBE_DEVICE') else 2):raise SystemExit('Requested installed runtime missing')
 PY
 xcrun clang -fobjc-arc -fblocks -framework Foundation -framework CoreFoundation -framework IOKit injector.m -o output/injector 2>output/compile.log || { cat output/compile.log; exit 1; }
-xcrun clang -fobjc-arc -fblocks -framework Foundation universal.m -o output/universal 2>output/universal-compile.log || { cat output/universal-compile.log; exit 1; }
+bash build-native.sh >output/native-compile.log 2>&1 || { cat output/native-compile.log; exit 1; }
 cat output/plan.json
 kit="$(xcode-select -p)/Library/PrivateFrameworks/SimulatorKit.framework/SimulatorKit"
 if [[ ! -f "$kit" ]]; then kit="$(xcode-select -p)/../SharedFrameworks/SimulatorKit.framework/SimulatorKit"; fi
@@ -44,8 +44,6 @@ while IFS=$'\t' read -r kind udid; do
   python3 bounded.py 30 xcrun simctl boot "$udid" >"output/$kind-boot.log" 2>&1 || true
   python3 bounded.py 180 xcrun simctl bootstatus "$udid" -b >>"output/$kind-boot.log" 2>&1 || true
   cat "output/$kind-boot.log"
-  python3 bounded.py 40 output/universal "$(xcode-select -p)" "$udid" >"output/$kind-universal.log" 2>&1 || true
-  cat "output/$kind-universal.log"
   if [[ -d "$(xcode-select -p)/Applications/Simulator.app" ]]; then
     python3 bounded.py 20 open -a "$(xcode-select -p)/Applications/Simulator.app" --args -CurrentDeviceUDID "$udid" >>"output/$kind-boot.log" 2>&1 || true
   fi
@@ -72,6 +70,23 @@ PY
   head -35 "output/$kind-injector.log"
   sleep 2
   python3 bounded.py 20 xcrun simctl io "$udid" screenshot "output/$kind-after.png" >"output/$kind-screenshot.log" 2>&1 || true
+  python3 bounded.py 30 xcrun simctl install "$udid" output/NativeProbe.app >"output/$kind-native-install.log" 2>&1
+  python3 bounded.py 30 xcrun simctl launch "$udid" org.jwprobe.nativeinput >"output/$kind-native-launch.log" 2>&1
+  python3 - "$kind" <<'PY'
+import sys,time
+from pathlib import Path
+p=Path('output')/(sys.argv[1]+'-native-events.jsonl')
+for _ in range(30):
+    if p.exists() and 'page-ready' in p.read_text():break
+    time.sleep(1)
+print('Native WKWebView ready:',p.exists() and 'page-ready' in p.read_text(),flush=True)
+PY
+  PROBE_DEVICE="$kind-native" python3 bounded.py 90 output/injector "$(xcode-select -p)" "$udid" >"output/$kind-native-injector.log" 2>&1 || true
+  sleep 2
+  python3 bounded.py 20 xcrun simctl io "$udid" screenshot "output/$kind-native.png" >>"output/$kind-screenshot.log" 2>&1 || true
+  container="$(xcrun simctl get_app_container "$udid" org.jwprobe.nativeinput data)"
+  cp "$container/Documents/native-events.jsonl" "output/$kind-native-api.jsonl"
+  python3 bounded.py 20 xcrun simctl terminate "$udid" org.jwprobe.nativeinput >>"output/$kind-native-launch.log" 2>&1 || true
   python3 bounded.py 20 xcrun simctl shutdown "$udid" >>"output/$kind-boot.log" 2>&1 || true
   current_device=''
 done < output/plan.tsv
