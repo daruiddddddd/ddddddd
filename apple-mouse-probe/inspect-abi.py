@@ -22,13 +22,15 @@ for p in paths:
         (out/'dtuhid-symbols-demangled.txt').write_text(subprocess.check_output(['xcrun','swift-demangle'],input=selected,text=True))
         targets=['PointerReportV10buttonMasks5UInt8Vvg','PointerReportV1xSivg','PointerReportV1ySivg','PointerReportV5flagsAC5FlagsVvg','PointerReportV8reportIDAA0eG0VvgZ','PointerReportV21initialReportBitCountSivgZ','HIDDeviceTypeO4from']
         proc=subprocess.Popen(['otool','-tvV',str(p)],stdout=subprocess.PIPE,text=True)
-        found=[];active=False;count=0
+        found=[];active=False;count=0;prefix=[]
         for line in proc.stdout:
+            if len(prefix)<40:prefix.append(line)
             if line.rstrip().endswith(':'):
-                active=any(t in line for t in targets);count=0
+                active=any(t in line for t in targets) or ('PointerReport' in line and '.getter' in line) or ('HIDDeviceType' in line and 'init(from:' in line);count=0
             if active and count<650:found.append(line);count+=1
         proc.wait()
         (out/'pointer-report-layout.txt').write_text(''.join(found))
+        (out/'dtuhid-disassembly-prefix.txt').write_text(''.join(prefix))
         break
 for name in ['IndigoHIDMessageForPointerEventFromHIDEventRef','IndigoHIDMessageForScrollEventFromHIDEventRef','IndigoHIDMessageToCreatePointerService','IndigoHIDMessageToCreateMouseService','_hidEventFilterCallback']:
     p=subprocess.Popen(['xcrun','otool','-tvV',str(kit)],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
