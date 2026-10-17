@@ -49,6 +49,9 @@ while IFS=$'\t' read -r kind udid; do
     python3 bounded.py 20 open -a "$(xcode-select -p)/Applications/Simulator.app" --args -CurrentDeviceUDID "$udid" >>"output/$kind-boot.log" 2>&1 || true
   fi
   python3 bounded.py 20 xcrun simctl io "$udid" screenshot "output/$kind-before.png" >>"output/$kind-boot.log" 2>&1 || true
+  if [[ "$kind" == "iphone" ]]; then
+    python3 bounded.py 20 xcrun simctl spawn "$udid" "$(pwd)/output/accessibility-setup" 1 >"output/$kind-accessibility-setup.log" 2>&1 || true
+  fi
   python3 - "$kind" "$udid" <<'PY'
 import sys,time
 import subprocess
@@ -89,6 +92,9 @@ PY
   container="$(xcrun simctl get_app_container "$udid" org.jwprobe.nativeinput data)"
   cp "$container/Documents/native-events.jsonl" "output/$kind-native-api.jsonl"
   python3 bounded.py 20 xcrun simctl terminate "$udid" org.jwprobe.nativeinput >>"output/$kind-native-launch.log" 2>&1 || true
+  if [[ "$kind" == "iphone" ]]; then
+    python3 bounded.py 20 xcrun simctl spawn "$udid" "$(pwd)/output/accessibility-setup" 0 >"output/$kind-accessibility-restore.log" 2>&1 || true
+  fi
   python3 bounded.py 20 xcrun simctl shutdown "$udid" >>"output/$kind-boot.log" 2>&1 || true
   current_device=''
 done < output/plan.tsv
