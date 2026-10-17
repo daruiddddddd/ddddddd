@@ -1,0 +1,25 @@
+name: Apple mouse input experiment
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - apple-mouse-probe/**
+      - .github/workflows/apple-mouse-probe.yml
+permissions:
+  contents: read
+jobs:
+  safari-input:
+    runs-on: macos-26
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test iPhone and iPad Simulator mouse input
+        run: bash apple-mouse-probe/run.sh
+      - name: Preserve actual logs including failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: apple-mouse-input-evidence
+          path: apple-mouse-probe/output/
+          retention-days: 7
+          if-no-files-found: error
