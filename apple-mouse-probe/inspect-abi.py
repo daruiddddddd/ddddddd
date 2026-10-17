@@ -11,11 +11,15 @@ strings=subprocess.check_output(['strings',str(kit)],text=True)
 paths=list(Path('/Library/Developer/PrivateFrameworks/CoreSimulator.framework').rglob('*dtuhid*'))
 (out/'dtuhid-inventory.txt').write_text('\n'.join(str(p) for p in paths))
 for p in paths:
-    if p.is_file() and p.name=='dtuhidd':
+    if p.is_file() and p.name=='dtuhidd' and '/iphoneos/' in str(p):
         (out/'dtuhid-path.txt').write_text(str(p))
         data=subprocess.check_output(['strings',str(p)],text=True,errors='replace')
         (out/'dtuhid-strings.txt').write_text(data)
         (out/'dtuhid-libraries.txt').write_text(subprocess.check_output(['otool','-L',str(p)],text=True))
+        symbols=subprocess.check_output(['nm','-a',str(p)],text=True,errors='replace')
+        selected='\n'.join(s for s in symbols.splitlines() if any(t in s for t in ['UniversalHIDRequest','HIDDeviceType','PointerReport','ScrollReport']))
+        (out/'dtuhid-symbols.txt').write_text(selected)
+        (out/'dtuhid-symbols-demangled.txt').write_text(subprocess.check_output(['xcrun','swift-demangle'],input=selected,text=True))
         break
 for name in ['IndigoHIDMessageForPointerEventFromHIDEventRef','IndigoHIDMessageForScrollEventFromHIDEventRef','IndigoHIDMessageToCreatePointerService','IndigoHIDMessageToCreateMouseService','_hidEventFilterCallback']:
     p=subprocess.Popen(['xcrun','otool','-tvV',str(kit)],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
