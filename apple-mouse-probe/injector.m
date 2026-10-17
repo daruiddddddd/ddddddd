@@ -76,8 +76,12 @@ static void center(void){
         NSDictionary *position=data?[NSJSONSerialization JSONObjectWithData:data options:0 error:NULL]:nil;
         double x=[position[@"x"] doubleValue],y=[position[@"y"] doubleValue];
         double width=[position[@"width"] doubleValue],height=[position[@"height"] doubleValue];
-        if(position[@"x"] && x>100 && y>100 && x<width-150 && y<height-150){printf("Page mouse position confirmed x=%g y=%g\n",x,y);return;}
-        mouse(60,70,0);settle(.25);
+        if(position[@"x"] && width>0 && height>0){
+            double ex=width*.4-x,ey=height*.4-y;
+            if(fabs(ex)<8 && fabs(ey)<8){printf("Page mouse position confirmed x=%g y=%g\n",x,y);return;}
+            mouse(fmax(-60,fmin(60,ex*.5)),fmax(-60,fmin(60,ey*.5)),0);
+        } else mouse(60,70,0);
+        settle(.25);
     }
     calibrationFailed=YES;printf("Page mouse position unavailable; do not interpret button tests as a platform result\n");
 }
