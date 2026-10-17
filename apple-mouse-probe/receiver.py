@@ -8,6 +8,7 @@ ROOT = Path(__file__).resolve().parent
 OUT = ROOT / 'output'
 OUT.mkdir(exist_ok=True)
 LOCK = threading.Lock()
+STATE = {}
 HTML = r'''<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Apple mouse input receiver</title><style>html,body{margin:0;width:100%;height:100%;overflow:hidden;touch-action:none;font:16px system-ui;background:#edf5fb}pre{pointer-events:none;white-space:pre-wrap;padding:20px}</style>
 <pre id="state">Waiting for real incoming Safari events. Simulator only.</pre><script>
@@ -22,6 +23,11 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, *args):
         pass
     def do_GET(self):
+        parsed=urlparse(self.path)
+        if parsed.path=='/latest':
+            device=parse_qs(parsed.query).get('device',[''])[0]
+            with LOCK: body=json.dumps(STATE.get(device,{})).encode()
+            self.send_response(200);self.send_header('Content-Type','application/json');self.end_headers();self.wfile.write(body);return
         self.send_response(200)
         self.send_header('Content-Type','text/html; charset=utf-8')
         self.end_headers()
@@ -40,6 +46,9 @@ class Handler(BaseHTTPRequestHandler):
             with LOCK, (OUT/(device+'-events.jsonl')).open('a',encoding='utf-8') as f:
                 for e in events:
                     f.write(json.dumps(e,ensure_ascii=False)+'\n')
+                    state=STATE.setdefault(device,{})
+                    if e.get('type')=='page-ready':state.update(width=e['width'],height=e['height'])
+                    if e.get('pointerType')=='mouse' and e.get('isTrusted') and e.get('x',-1)>=0 and e.get('y',-1)>=0:state.update(x=e['x'],y=e['y'],buttons=e.get('buttons'),t=e.get('t'))
             self.send_response(204);self.end_headers()
         except (ValueError,TypeError):
             self.send_error(400)
