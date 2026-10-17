@@ -77,6 +77,15 @@ static void observeMouse(GCMouse *mouse) {
 @end
 @interface ProbeController : UIViewController @end
 @implementation ProbeController
+- (BOOL)prefersPointerLocked{return [NSProcessInfo.processInfo.arguments containsObject:@"--pointer-lock"];}
+- (void)viewDidAppear:(BOOL)animated {
+    [super viewDidAppear:animated];
+    [self setNeedsUpdateOfPrefersPointerLocked];
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW,2*NSEC_PER_SEC),dispatch_get_main_queue(),^{
+        UIPointerLockState *state=self.view.window.windowScene.pointerLockState;
+        record(@{@"source":@"app",@"type":@"pointer-lock",@"requested":@(self.prefersPointerLocked),@"stateAvailable":@(state!=nil),@"locked":@(state.isLocked)});
+    });
+}
 - (void)viewDidLoad {
     [super viewDidLoad];
     WKWebView *web=[[WKWebView alloc] initWithFrame:self.view.bounds];
@@ -84,7 +93,10 @@ static void observeMouse(GCMouse *mouse) {
     web.autoresizingMask=UIViewAutoresizingFlexibleWidth|UIViewAutoresizingFlexibleHeight;
     [self.view addSubview:web];
     NSString *kind=UIDevice.currentDevice.userInterfaceIdiom==UIUserInterfaceIdiomPad?@"ipad":@"iphone";
-    [web loadRequest:[NSURLRequest requestWithURL:[NSURL URLWithString:[NSString stringWithFormat:@"http://127.0.0.1:8765/?device=%@-native",kind]]]];
+    NSString *phase=self.prefersPointerLocked?@"locked":@"native";
+    NSArray *args=NSProcessInfo.processInfo.arguments;NSUInteger arg=[args indexOfObject:@"--probe-phase"];
+    if(arg!=NSNotFound && arg+1<args.count)phase=args[arg+1];
+    [web loadRequest:[NSURLRequest requestWithURL:[NSURL URLWithString:[NSString stringWithFormat:@"http://127.0.0.1:8765/?device=%@-%@",kind,phase]]]];
     record(@{@"source":@"app",@"type":@"ready",@"device":kind,@"systemVersion":UIDevice.currentDevice.systemVersion,@"mouseCount":@(GCMouse.mice.count),@"assistiveTouch":@(UIAccessibilityIsAssistiveTouchRunning())});
     for(GCMouse *mouse in GCMouse.mice)observeMouse(mouse);
     [NSNotificationCenter.defaultCenter addObserverForName:GCMouseDidConnectNotification object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *n){ observeMouse(n.object); }];
