@@ -8,6 +8,18 @@ on:
 permissions:
   contents: read
 jobs:
+  wrapper-diagnostics:
+    runs-on: xcode-27
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 apple-mouse-probe/inspect-abi.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: wrapper-diagnostics
+          path: apple-mouse-probe/output/
+          retention-days: 7
   safari-input:
     runs-on: xcode-27
     timeout-minutes: 12
