@@ -6,7 +6,7 @@ kit=dev.parent/'SharedFrameworks/SimulatorKit.framework/SimulatorKit'
 if not kit.exists():kit=dev/'Library/PrivateFrameworks/SimulatorKit.framework/SimulatorKit'
 out=Path(__file__).resolve().parent/'output';out.mkdir(exist_ok=True)
 (out/'binary-info.txt').write_text(subprocess.check_output(['file',str(kit)],text=True))
-for name in ['IndigoHIDMessageForPointerEventFromHIDEventRef','IndigoHIDMessageForScrollEventFromHIDEventRef']:
+for name in ['IndigoHIDMessageForPointerEventFromHIDEventRef','IndigoHIDMessageForScrollEventFromHIDEventRef','IndigoHIDMessageToCreatePointerService','IndigoHIDMessageToCreateMouseService','_hidEventFilterCallback']:
     p=subprocess.Popen(['xcrun','otool','-tvV',str(kit)],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
     lines=[]
     for line in p.stdout:
