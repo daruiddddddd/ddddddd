@@ -30,6 +30,7 @@ PY
 xcrun clang -fobjc-arc -fblocks -framework Foundation -framework CoreFoundation -framework IOKit injector.m -o output/injector 2>output/compile.log || { cat output/compile.log; exit 1; }
 cat output/plan.json
 kit="$(xcode-select -p)/Library/PrivateFrameworks/SimulatorKit.framework/SimulatorKit"
+if [[ ! -f "$kit" ]]; then kit="$(xcode-select -p)/../SharedFrameworks/SimulatorKit.framework/SimulatorKit"; fi
 strings "$kit" | grep 'IndigoHIDMessage \*' >output/simulator-kit-prototypes.txt || true
 python3 receiver.py >output/receiver.log 2>&1 &
 receiver_pid=$!
@@ -42,7 +43,9 @@ while IFS=$'\t' read -r kind udid; do
   python3 bounded.py 30 xcrun simctl boot "$udid" >"output/$kind-boot.log" 2>&1 || true
   python3 bounded.py 180 xcrun simctl bootstatus "$udid" -b >>"output/$kind-boot.log" 2>&1 || true
   cat "output/$kind-boot.log"
-  python3 bounded.py 20 open -a "$(xcode-select -p)/Applications/Simulator.app" --args -CurrentDeviceUDID "$udid" >>"output/$kind-boot.log" 2>&1 || true
+  if [[ -d "$(xcode-select -p)/Applications/Simulator.app" ]]; then
+    python3 bounded.py 20 open -a "$(xcode-select -p)/Applications/Simulator.app" --args -CurrentDeviceUDID "$udid" >>"output/$kind-boot.log" 2>&1 || true
+  fi
   python3 bounded.py 20 xcrun simctl io "$udid" screenshot "output/$kind-before.png" >>"output/$kind-boot.log" 2>&1 || true
   python3 - "$kind" "$udid" <<'PY'
 import sys,time
