@@ -34,6 +34,7 @@ jobs:
       - name: Test iPhone and iPad Simulator mouse input
         env:
           PROBE_DEVICE: ${{ matrix.device }}
+          PROBE_FOCUS: ${{ contains(github.event.head_commit.message, '[native-policy]') && 'native-policy' || '' }}
         run: bash apple-mouse-probe/run.sh
       - name: Preserve actual logs including failures
         if: always()
