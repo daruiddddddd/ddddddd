@@ -67,6 +67,28 @@ with (Path('output')/(kind+'-open.log')).open('w') as log:
             time.sleep(1)
     print('Safari ready:',p.exists() and 'page-ready' in p.read_text(),flush=True)
 PY
+  if [[ "${PROBE_FOCUS:-}" == "universal-only" ]]; then
+    phases=(universal)
+    if [[ "$kind" == "iphone" ]]; then phases=(universal universal-on); fi
+    for phase in "${phases[@]}"; do
+      if [[ "$kind" == "iphone" ]]; then
+        setting=0;if [[ "$phase" == "universal-on" ]]; then setting=1;fi
+        python3 bounded.py 35 xcrun simctl spawn "$udid" "$(pwd)/output/accessibility-setup" "$setting" >"output/$kind-$phase-accessibility.log" 2>&1 || true
+        sleep 20
+      fi
+      python3 bounded.py 30 xcrun simctl openurl "$udid" "http://127.0.0.1:8765/?device=$kind-$phase" >"output/$kind-$phase-open.log" 2>&1 || true
+      sleep 5
+      PROBE_CHANNEL="$kind-$phase" python3 bounded.py 90 output/universal "$(xcode-select -p)" "$udid" >"output/$kind-$phase.log" 2>&1 || true
+      sleep 2
+      python3 bounded.py 20 xcrun simctl io "$udid" screenshot "output/$kind-$phase.png" >>"output/$kind-boot.log" 2>&1 || true
+    done
+    if [[ "$kind" == "iphone" ]]; then
+      python3 bounded.py 20 xcrun simctl spawn "$udid" "$(pwd)/output/accessibility-setup" 0 >"output/$kind-accessibility-restore.log" 2>&1 || true
+    fi
+    python3 bounded.py 20 xcrun simctl shutdown "$udid" >>"output/$kind-boot.log" 2>&1 || true
+    current_device=''
+    continue
+  fi
   if [[ "$kind" == "iphone" ]]; then
     if [[ "${PROBE_FOCUS:-}" == "native-policy" ]]; then
       python3 bounded.py 35 xcrun simctl spawn "$udid" "$(pwd)/output/accessibility-setup" 1 >"output/$kind-accessibility-setup.log" 2>&1 || true
