@@ -13,11 +13,20 @@ typedef Event (*ScrollFn)(CFAllocatorRef,uint64_t,double,double,double,uint32_t)
 typedef void *(*WrapFn)(Event,uint32_t);
 typedef void *(*ServiceFn)(void);
 typedef uint32_t (*TypeFn)(Event);
+typedef Event (*CreateFn)(CFAllocatorRef,uint32_t,uint64_t,uint32_t);
+typedef void (*AppendFn)(Event,Event,uint32_t);
+typedef void (*SetIntFn)(Event,uint32_t,int64_t);
+typedef void (*SetFloatFn)(Event,uint32_t,double);
 static id client;
 static MouseFn mouseEvent;
 static ScrollFn scrollEvent;
 static WrapFn wrapMouse,wrapScroll;
 static TypeFn eventType;
+static CreateFn createEvent;
+static AppendFn appendEvent;
+static SetIntFn setInt;
+static SetFloatFn setFloat;
+static uint32_t previousButtons=0;
 static int sent=0,rejected=0;
 static void settle(double seconds){[[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:seconds]];}
 static void deliver(void *p){
@@ -29,6 +38,17 @@ static void deliver(void *p){
 static void mouse(double dx,double dy,uint32_t buttons){
     Event e=mouseEvent(kCFAllocatorDefault,mach_absolute_time(),dx,dy,0,buttons,0);
     if(!e){rejected++;return;}
+    // SimulatorKit rejects leaf pointer events. Include the raw motion and
+    // changed button children, with number/state fields from IOHIDEventTypes.
+    Event motion=mouseEvent(kCFAllocatorDefault,mach_absolute_time(),dx,dy,0,buttons,0);
+    if(motion){appendEvent(e,motion,0);CFRelease(motion);}
+    for(uint32_t n=1;n<=2;n++){
+        uint32_t mask=1u<<(n-1);
+        if(((buttons^previousButtons)&mask)==0)continue;
+        Event b=createEvent(kCFAllocatorDefault,2,mach_absolute_time(),0);
+        if(b){setInt(b,0x20000,buttons);setInt(b,0x20001,n);setInt(b,0x20002,1);setFloat(b,0x20003,(buttons&mask)?1:0);setInt(b,0x20004,(buttons&mask)?1:0);appendEvent(e,b,0);CFRelease(b);}
+    }
+    previousButtons=buttons;
     printf("mouse dx=%g dy=%g buttons=%u hidType=%u\n",dx,dy,buttons,eventType?eventType(e):0);
     deliver(wrapMouse(e,0x36));CFRelease(e);
 }
@@ -54,10 +74,14 @@ int main(int argc,const char **argv){@autoreleasepool{
     mouseEvent=(MouseFn)dlsym(io,"IOHIDEventCreateMouseEvent");
     scrollEvent=(ScrollFn)dlsym(io,"IOHIDEventCreateScrollEvent");
     eventType=(TypeFn)dlsym(io,"IOHIDEventGetType");
+    createEvent=(CreateFn)dlsym(io,"IOHIDEventCreate");
+    appendEvent=(AppendFn)dlsym(io,"IOHIDEventAppendEvent");
+    setInt=(SetIntFn)dlsym(io,"IOHIDEventSetIntegerValue");
+    setFloat=(SetFloatFn)dlsym(io,"IOHIDEventSetFloatValue");
     wrapMouse=(WrapFn)dlsym(kit,"IndigoHIDMessageForPointerEventFromHIDEventRef");
     wrapScroll=(WrapFn)dlsym(kit,"IndigoHIDMessageForScrollEventFromHIDEventRef");
     printf("symbols mouse=%d scroll=%d pointerWrapper=%d scrollWrapper=%d\n",mouseEvent!=NULL,scrollEvent!=NULL,wrapMouse!=NULL,wrapScroll!=NULL);
-    if(!mouseEvent||!wrapMouse){fprintf(stderr,"required pointer symbols unavailable\n");return 4;}
+    if(!mouseEvent||!wrapMouse||!createEvent||!appendEvent||!setInt||!setFloat){fprintf(stderr,"required pointer symbols unavailable\n");return 4;}
     Class contextClass=NSClassFromString(@"SimServiceContext");
     SEL ctxSel=NSSelectorFromString(@"sharedServiceContextForDeveloperDir:error:");
     NSError *error=nil;
