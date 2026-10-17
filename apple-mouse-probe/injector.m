@@ -31,6 +31,7 @@ static SetIntFn setInt;
 static SetFloatFn setFloat;
 static GetIntFn getInt;
 static uint32_t previousButtons=0;
+static uint32_t target=0x36;
 static int sent=0,rejected=0;
 static int callbacks=0;
 static int callbackErrors=0;
@@ -64,7 +65,7 @@ static void mouse(double dx,double dy,uint32_t buttons){
     }
     previousButtons=buttons;
     printf("mouse time=%.6f dx=%g dy=%g buttons=%u hidType=%u\n",NSDate.date.timeIntervalSince1970,dx,dy,buttons,eventType?eventType(e):0);
-    deliver(wrapMouse(e,0x36));CFRelease(e);
+    deliver(wrapMouse(e,target));CFRelease(e);
 }
 static BOOL calibrationFailed=NO;
 static void center(void){
@@ -89,6 +90,9 @@ int main(int argc,const char **argv){@autoreleasepool{
     setvbuf(stdout,NULL,_IONBF,0);
     setvbuf(stderr,NULL,_IONBF,0);
     if(argc!=3){fprintf(stderr,"usage: injector developer-dir simulator-udid\n");return 2;}
+    if(getenv("PROBE_TARGET"))target=(uint32_t)strtoul(getenv("PROBE_TARGET"),NULL,0);
+    if(target!=0x35&&target!=0x36)return 2;
+    printf("Input service target=%u\n",target);
     NSString *dev=@(argv[1]),*udid=@(argv[2]);
     void *core=dlopen("/Library/Developer/PrivateFrameworks/CoreSimulator.framework/CoreSimulator",RTLD_NOW|RTLD_GLOBAL);
     if(!core)fprintf(stderr,"CoreSimulator load failed: %s\n",dlerror());
@@ -147,7 +151,7 @@ int main(int argc,const char **argv){@autoreleasepool{
         for(int j=1;j<5;j++){mouse(0,0,chords[i][j]);if(chords[i][j]==3)for(int k=0;k<4;k++)mouse(12,10,3);if(j==3)settle(1);}
     }
     center();
-    if(scrollEvent&&wrapScroll){for(int d=-1;d<=1;d+=2){Event e=scrollEvent(kCFAllocatorDefault,mach_absolute_time(),0,d*120,0,0);if(e){deliver(wrapScroll(e,0x36));CFRelease(e);}}}
+    if(scrollEvent&&wrapScroll){for(int d=-1;d<=1;d+=2){Event e=scrollEvent(kCFAllocatorDefault,mach_absolute_time(),0,d*120,0,0);if(e){deliver(wrapScroll(e,target));CFRelease(e);}}}
     mouse(0,0,0);settle(2);
     // Positive control only. Touch reception is never classified as mouse parity.
     typedef void *(*TouchFn)(CGPoint*,CGPoint*,uint32_t,NSUInteger,CGSize,uint32_t);
