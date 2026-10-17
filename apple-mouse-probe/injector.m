@@ -7,6 +7,8 @@
 #import <dlfcn.h>
 #import <mach/mach_time.h>
 #import <math.h>
+#import <unistd.h>
+#import <CoreGraphics/CoreGraphics.h>
 typedef CFTypeRef Event;
 typedef Event (*MouseFn)(CFAllocatorRef,uint64_t,double,double,double,uint32_t,uint32_t);
 typedef Event (*ScrollFn)(CFAllocatorRef,uint64_t,double,double,double,uint32_t);
@@ -28,11 +30,19 @@ static SetIntFn setInt;
 static SetFloatFn setFloat;
 static uint32_t previousButtons=0;
 static int sent=0,rejected=0;
-static void settle(double seconds){[[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:seconds]];}
+static int callbacks=0;
+static void settle(double seconds){
+    NSDate *until=[NSDate dateWithTimeIntervalSinceNow:seconds];
+    while([until timeIntervalSinceNow]>0){
+        [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode beforeDate:until];
+        usleep(1000);
+    }
+}
 static void deliver(void *p){
     if(!p){rejected++;fprintf(stderr,"wrapper returned nil\n");return;}
     SEL s=NSSelectorFromString(@"sendWithMessage:freeWhenDone:completionQueue:completion:");
-    ((void(*)(id,SEL,void*,BOOL,id,id))objc_msgSend)(client,s,p,YES,nil,nil);
+    void (^done)(void)=^{callbacks++;};
+    ((void(*)(id,SEL,void*,BOOL,id,id))objc_msgSend)(client,s,p,YES,dispatch_get_main_queue(),done);
     sent++;settle(0.04);
 }
 static void mouse(double dx,double dy,uint32_t buttons){
@@ -103,16 +113,10 @@ int main(int argc,const char **argv){@autoreleasepool{
     for(const char **name=(const char*[]){"IndigoHIDMessageToCreatePointerService","IndigoHIDMessageToCreateMouseService",NULL};*name;name++){
         ServiceFn f=(ServiceFn)dlsym(kit,*name);printf("service %s available=%d\n",*name,f!=NULL);if(f)deliver(f());
     }
-    settle(1);
+    settle(3);
     center();
     for(uint32_t button=1;button<=2;button++){
         printf("BEGIN single-button %u\n",button);center();mouse(0,0,button);mouse(0,0,0);
-        for(int hour=1;hour<=12;hour++){
-            center();mouse(0,0,button);
-            double a=(hour*30-90)*M_PI/180.;
-            for(int step=0;step<4;step++)mouse(16*cos(a),16*sin(a),button);
-            mouse(0,0,0);
-        }
     }
     const uint32_t chords[4][5]={{0,1,3,1,0},{0,1,3,2,0},{0,2,3,2,0},{0,2,3,1,0}};
     for(int i=0;i<4;i++){
@@ -121,8 +125,12 @@ int main(int argc,const char **argv){@autoreleasepool{
     }
     center();
     if(scrollEvent&&wrapScroll){for(int d=-1;d<=1;d+=2){Event e=scrollEvent(kCFAllocatorDefault,mach_absolute_time(),0,d*120,0,0);if(e){deliver(wrapScroll(e,0x36));CFRelease(e);}}}
-    mouse(0,0,0);settle(1);
+    mouse(0,0,0);settle(2);
+    // Positive control only. Touch reception is never classified as mouse parity.
+    typedef void *(*TouchFn)(CGPoint*,CGPoint*,uint32_t,NSUInteger,CGSize,uint32_t);
+    TouchFn touch=(TouchFn)dlsym(kit,"IndigoHIDMessageForMouseNSEvent");
+    if(touch){printf("BEGIN touch positive control; excluded from mouse pass\n");CGPoint p=CGPointMake(.5,.4);CGSize size=CGSizeMake(1,1);deliver(touch(&p,NULL,0x32,1,size,0));settle(.15);deliver(touch(&p,NULL,0x32,2,size,0));settle(2);}
     ServiceFn remove=(ServiceFn)dlsym(kit,"IndigoHIDMessageToRemovePointerService");if(remove)deliver(remove());
-    printf("sent=%d rejected=%d; inspect Safari receiver logs before drawing any conclusion\n",sent,rejected);
+    printf("sent=%d rejected=%d callbacks=%d; inspect Safari receiver logs before drawing any conclusion\n",sent,rejected,callbacks);
     return rejected?9:0;
 }}
