@@ -6,12 +6,26 @@
 
 static NSFileHandle *logFile;
 static NSMutableSet<GCMouse *> *observedMice;
+static WKWebView *bridgeView;
+static CGPoint bridgePoint;
+static BOOL hasBridgePoint=NO;
+static NSUInteger bridgeButtons=0;
 static void record(NSDictionary *data) {
     NSMutableDictionary *row=[data mutableCopy];
     row[@"uptime"]=@(NSProcessInfo.processInfo.systemUptime);
     row[@"wall"]=@(NSDate.date.timeIntervalSince1970);
     NSData *bytes=[NSJSONSerialization dataWithJSONObject:row options:0 error:nil];
     @synchronized(logFile) { [logFile writeData:bytes]; [logFile writeData:[@"\n" dataUsingEncoding:NSUTF8StringEncoding]]; }
+}
+static void bridge(NSDictionary *data) {
+    if(!bridgeView || !hasBridgePoint)return;
+    NSMutableDictionary *row=[data mutableCopy];
+    row[@"x"]=@(bridgePoint.x); row[@"y"]=@(bridgePoint.y);
+    row[@"buttons"]=@(bridgeButtons); row[@"nativeWall"]=@(NSDate.date.timeIntervalSince1970);
+    row[@"origin"]=@"public-native-api";
+    NSData *bytes=[NSJSONSerialization dataWithJSONObject:row options:0 error:nil];
+    NSString *json=[[NSString alloc] initWithData:bytes encoding:NSUTF8StringEncoding];
+    [bridgeView evaluateJavaScript:[NSString stringWithFormat:@"window.nativeMouseInput && window.nativeMouseInput(%@)",json] completionHandler:^(id result,NSError *error){if(error)record(@{@"source":@"bridge",@"type":@"error",@"error":error.description});}];
 }
 static NSUInteger buttons(GCMouseInput *input) {
     return (input.leftButton.isPressed?1:0)|(input.rightButton.isPressed?2:0)|(input.middleButton.isPressed?4:0);
@@ -26,9 +40,13 @@ static void observeMouse(GCMouse *mouse) {
         if(entry[@"button"]==NSNull.null)continue;
         GCControllerButtonInput *button=entry[@"button"];
         NSString *name=entry[@"name"];
-        button.pressedChangedHandler=^(GCControllerButtonInput *b,float value,BOOL pressed){ record(@{@"source":@"GCMouse",@"type":@"button",@"name":name,@"pressed":@(pressed),@"value":@(value),@"buttons":@(buttons(input))}); };
+        button.pressedChangedHandler=^(GCControllerButtonInput *b,float value,BOOL pressed){
+            bridgeButtons=buttons(input);
+            record(@{@"source":@"GCMouse",@"type":@"button",@"name":name,@"pressed":@(pressed),@"value":@(value),@"buttons":@(bridgeButtons)});
+            bridge(@{@"type":@"native-button",@"api":@"GCMouse",@"name":name,@"pressed":@(pressed)});
+        };
     }
-    input.scroll.valueChangedHandler=^(GCControllerDirectionPad *pad,float x,float y){ record(@{@"source":@"GCMouse",@"type":@"scroll",@"x":@(x),@"y":@(y),@"buttons":@(buttons(input))}); };
+    input.scroll.valueChangedHandler=^(GCControllerDirectionPad *pad,float x,float y){ record(@{@"source":@"GCMouse",@"type":@"scroll",@"x":@(x),@"y":@(y),@"buttons":@(buttons(input))}); bridge(@{@"type":@"native-scroll",@"api":@"GCMouse",@"deltaX":@(x),@"deltaY":@(y)}); };
 }
 @interface ProbeApplication : UIApplication @end
 @implementation ProbeApplication
@@ -39,6 +57,13 @@ static void observeMouse(GCMouse *mouse) {
         [touches addObject:@{@"phase":@(touch.phase),@"touchType":@(touch.type),@"x":@(p.x),@"y":@(p.y),@"timestamp":@(touch.timestamp)}];
     }
     if(touches.count || event.buttonMask)record(@{@"source":@"UIKit",@"type":@"event",@"eventType":@(event.type),@"buttons":@(event.buttonMask),@"timestamp":@(event.timestamp),@"touches":touches});
+    for(UITouch *touch in event.allTouches)if(touch.type==UITouchTypeIndirectPointer && bridgeView){
+        CGPoint p=[touch locationInView:bridgeView];
+        if(!hasBridgePoint || !CGPointEqualToPoint(p,bridgePoint)){
+            bridgePoint=p; hasBridgePoint=YES;
+            bridge(@{@"type":@"native-move",@"api":@"UIKit",@"nativeTimestamp":@(event.timestamp)});
+        }
+    }
     [super sendEvent:event];
 }
 @end
@@ -47,6 +72,7 @@ static void observeMouse(GCMouse *mouse) {
 - (void)viewDidLoad {
     [super viewDidLoad];
     WKWebView *web=[[WKWebView alloc] initWithFrame:self.view.bounds];
+    bridgeView=web;
     web.autoresizingMask=UIViewAutoresizingFlexibleWidth|UIViewAutoresizingFlexibleHeight;
     [self.view addSubview:web];
     NSString *kind=UIDevice.currentDevice.userInterfaceIdiom==UIUserInterfaceIdiomPad?@"ipad":@"iphone";
