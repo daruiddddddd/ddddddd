@@ -49,9 +49,6 @@ while IFS=$'\t' read -r kind udid; do
     python3 bounded.py 20 open -a "$(xcode-select -p)/Applications/Simulator.app" --args -CurrentDeviceUDID "$udid" >>"output/$kind-boot.log" 2>&1 || true
   fi
   python3 bounded.py 20 xcrun simctl io "$udid" screenshot "output/$kind-before.png" >>"output/$kind-boot.log" 2>&1 || true
-  if [[ "$kind" == "iphone" ]]; then
-    python3 bounded.py 20 xcrun simctl spawn "$udid" "$(pwd)/output/accessibility-setup" 1 >"output/$kind-accessibility-setup.log" 2>&1 || true
-  fi
   python3 - "$kind" "$udid" <<'PY'
 import sys,time
 import subprocess
@@ -70,6 +67,9 @@ with (Path('output')/(kind+'-open.log')).open('w') as log:
             time.sleep(1)
     print('Safari ready:',p.exists() and 'page-ready' in p.read_text(),flush=True)
 PY
+  if [[ "$kind" == "iphone" ]]; then
+    python3 bounded.py 35 xcrun simctl spawn "$udid" "$(pwd)/output/accessibility-setup" 1 >"output/$kind-accessibility-setup.log" 2>&1 || true
+  fi
   python3 bounded.py 65 output/universal "$(xcode-select -p)" "$udid" >"output/$kind-universal.log" 2>&1 || true
   python3 bounded.py 30 xcrun simctl openurl "$udid" "http://127.0.0.1:8765/?device=$kind" >"output/$kind-legacy-page.log" 2>&1 || true
   sleep 5
@@ -77,7 +77,7 @@ PY
   head -35 "output/$kind-injector.log"
   sleep 2
   python3 bounded.py 20 xcrun simctl io "$udid" screenshot "output/$kind-after.png" >"output/$kind-screenshot.log" 2>&1 || true
-  python3 bounded.py 30 xcrun simctl install "$udid" output/NativeProbe.app >"output/$kind-native-install.log" 2>&1
+  python3 bounded.py 45 xcrun simctl install "$udid" output/NativeProbe.app >"output/$kind-native-install.log" 2>&1 || python3 bounded.py 45 xcrun simctl install "$udid" output/NativeProbe.app >>"output/$kind-native-install.log" 2>&1
   python3 bounded.py 30 xcrun simctl launch "$udid" org.jwprobe.nativeinput >"output/$kind-native-launch.log" 2>&1
   python3 - "$kind" <<'PY'
 import sys,time
@@ -95,6 +95,17 @@ PY
   cp "$container/Documents/native-events.jsonl" "output/$kind-native-api.jsonl"
   python3 bounded.py 20 xcrun simctl terminate "$udid" org.jwprobe.nativeinput >>"output/$kind-native-launch.log" 2>&1 || true
   if [[ "$kind" == "iphone" ]]; then
+    for phase in locked trackpad; do
+      extra=()
+      target=0x36
+      if [[ "$phase" == "locked" ]]; then extra=(--pointer-lock); else target=0x35; fi
+      python3 bounded.py 30 xcrun simctl launch "$udid" org.jwprobe.nativeinput --probe-phase "$phase" "${extra[@]}" >"output/$kind-$phase-launch.log" 2>&1 || true
+      sleep 5
+      PROBE_DEVICE="$kind-$phase" PROBE_TARGET="$target" python3 bounded.py 90 output/injector "$(xcode-select -p)" "$udid" >"output/$kind-$phase-injector.log" 2>&1 || true
+      sleep 2
+      cp "$container/Documents/native-events.jsonl" "output/$kind-$phase-api.jsonl"
+      python3 bounded.py 20 xcrun simctl terminate "$udid" org.jwprobe.nativeinput >>"output/$kind-$phase-launch.log" 2>&1 || true
+    done
     python3 bounded.py 20 xcrun simctl spawn "$udid" "$(pwd)/output/accessibility-setup" 0 >"output/$kind-accessibility-restore.log" 2>&1 || true
   fi
   python3 bounded.py 20 xcrun simctl shutdown "$udid" >>"output/$kind-boot.log" 2>&1 || true
