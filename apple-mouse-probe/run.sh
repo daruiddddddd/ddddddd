@@ -38,7 +38,7 @@ python3 receiver.py >output/receiver.log 2>&1 &
 receiver_pid=$!
 current_device=''
 cleanup(){ kill "$receiver_pid" 2>/dev/null || true; if [[ -n "$current_device" ]]; then python3 bounded.py 20 xcrun simctl shutdown "$current_device" >/dev/null 2>&1 || true; fi; }
-trap cleanup EXIT
+trap 'status=$?; trap - EXIT; cleanup; exit "$status"' EXIT
 while IFS=$'\t' read -r kind udid; do
   current_device="$udid"
   printf '\nStarting %s %s\n' "$kind" "$udid"
@@ -68,7 +68,13 @@ with (Path('output')/(kind+'-open.log')).open('w') as log:
     print('Safari ready:',p.exists() and 'page-ready' in p.read_text(),flush=True)
 PY
   if [[ "$kind" == "iphone" ]]; then
+    python3 bounded.py 35 xcrun simctl spawn "$udid" "$(pwd)/output/accessibility-setup" 0 >"output/$kind-accessibility-baseline.log" 2>&1 || true
+    python3 bounded.py 30 xcrun simctl openurl "$udid" "http://127.0.0.1:8765/?device=$kind-off-before" >"output/$kind-off-before-open.log" 2>&1 || true
+    sleep 8
+    PROBE_DEVICE="$kind-off-before" python3 bounded.py 90 output/injector "$(xcode-select -p)" "$udid" >"output/$kind-off-before-injector.log" 2>&1 || true
+    python3 bounded.py 30 xcrun simctl openurl "$udid" "http://127.0.0.1:8765/?device=$kind-universal" >>"output/$kind-open.log" 2>&1 || true
     python3 bounded.py 35 xcrun simctl spawn "$udid" "$(pwd)/output/accessibility-setup" 1 >"output/$kind-accessibility-setup.log" 2>&1 || true
+    sleep 20
   fi
   python3 bounded.py 65 output/universal "$(xcode-select -p)" "$udid" >"output/$kind-universal.log" 2>&1 || true
   python3 bounded.py 30 xcrun simctl openurl "$udid" "http://127.0.0.1:8765/?device=$kind" >"output/$kind-legacy-page.log" 2>&1 || true
@@ -77,6 +83,12 @@ PY
   head -35 "output/$kind-injector.log"
   sleep 2
   python3 bounded.py 20 xcrun simctl io "$udid" screenshot "output/$kind-after.png" >"output/$kind-screenshot.log" 2>&1 || true
+  if [[ "$kind" == "iphone" ]]; then
+    python3 bounded.py 35 xcrun simctl spawn "$udid" "$(pwd)/output/accessibility-setup" 0 >"output/$kind-accessibility-off-after.log" 2>&1 || true
+    python3 bounded.py 30 xcrun simctl openurl "$udid" "http://127.0.0.1:8765/?device=$kind-off-after" >"output/$kind-off-after-open.log" 2>&1 || true
+    sleep 8
+    PROBE_DEVICE="$kind-off-after" python3 bounded.py 90 output/injector "$(xcode-select -p)" "$udid" >"output/$kind-off-after-injector.log" 2>&1 || true
+  fi
   python3 bounded.py 45 xcrun simctl install "$udid" output/NativeProbe.app >"output/$kind-native-install.log" 2>&1 || python3 bounded.py 45 xcrun simctl install "$udid" output/NativeProbe.app >>"output/$kind-native-install.log" 2>&1
   python3 bounded.py 30 xcrun simctl launch "$udid" org.jwprobe.nativeinput >"output/$kind-native-launch.log" 2>&1
   python3 - "$kind" <<'PY'
@@ -95,13 +107,12 @@ PY
   cp "$container/Documents/native-events.jsonl" "output/$kind-native-api.jsonl"
   python3 bounded.py 20 xcrun simctl terminate "$udid" org.jwprobe.nativeinput >>"output/$kind-native-launch.log" 2>&1 || true
   if [[ "$kind" == "iphone" ]]; then
-    for phase in locked trackpad; do
-      extra=()
-      target=0x36
-      if [[ "$phase" == "locked" ]]; then extra=(--pointer-lock); else target=0x35; fi
-      python3 bounded.py 30 xcrun simctl launch "$udid" org.jwprobe.nativeinput --probe-phase "$phase" "${extra[@]}" >"output/$kind-$phase-launch.log" 2>&1 || true
+    for phase in native-on; do
+      python3 bounded.py 35 xcrun simctl spawn "$udid" "$(pwd)/output/accessibility-setup" 1 >"output/$kind-$phase-accessibility.log" 2>&1 || true
+      sleep 20
+      python3 bounded.py 30 xcrun simctl launch "$udid" org.jwprobe.nativeinput --probe-phase "$phase" >"output/$kind-$phase-launch.log" 2>&1 || true
       sleep 5
-      PROBE_DEVICE="$kind-$phase" PROBE_TARGET="$target" python3 bounded.py 90 output/injector "$(xcode-select -p)" "$udid" >"output/$kind-$phase-injector.log" 2>&1 || true
+      PROBE_DEVICE="$kind-$phase" python3 bounded.py 90 output/injector "$(xcode-select -p)" "$udid" >"output/$kind-$phase-injector.log" 2>&1 || true
       sleep 2
       cp "$container/Documents/native-events.jsonl" "output/$kind-$phase-api.jsonl"
       python3 bounded.py 20 xcrun simctl terminate "$udid" org.jwprobe.nativeinput >>"output/$kind-$phase-launch.log" 2>&1 || true
@@ -111,4 +122,5 @@ PY
   python3 bounded.py 20 xcrun simctl shutdown "$udid" >>"output/$kind-boot.log" 2>&1 || true
   current_device=''
 done < output/plan.tsv
+printf 'All planned phases completed\n' > output/phases-completed.txt
 python3 assess.py
