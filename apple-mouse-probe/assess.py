@@ -1,5 +1,5 @@
 """Classify received events without equating simulator/HID delivery to hardware."""
-import json
+import json,os
 from pathlib import Path
 
 def assess(events):
@@ -29,7 +29,9 @@ if __name__=='__main__':
     out=Path(__file__).resolve().parent/'output'
     report={}
     for kind in ['iphone','ipad']:
+        if os.environ.get('PROBE_DEVICE') and kind!=os.environ['PROBE_DEVICE']:continue
         p=out/(kind+'-events.jsonl')
         report[kind]=assess([json.loads(s) for s in p.read_text().splitlines()] if p.exists() else [])
     (out/'assessment.json').write_text(json.dumps(report,ensure_ascii=False,indent=2))
     print(json.dumps(report,ensure_ascii=False,indent=2))
+    if not all(r['coreMouseDeliveryObserved'] for r in report.values()):raise SystemExit(2)
