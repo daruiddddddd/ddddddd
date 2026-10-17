@@ -15,6 +15,9 @@ HTML = r'''<!doctype html><meta name="viewport" content="width=device-width,init
 const device=new URLSearchParams(location.search).get('device');let queue=[],count=0;
 function flush(){if(!queue.length)return;const events=queue.splice(0);fetch('/events?device='+device,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(events)}).catch(()=>queue.unshift(...events));}
 queue.push({type:'page-ready',userAgent:navigator.userAgent,width:innerWidth,height:innerHeight,t:performance.now()});
+// Native API transport is recorded separately. It never impersonates a trusted
+// browser PointerEvent or fabricates a button release from time or motion.
+window.nativeMouseInput=item=>{queue.push({...item,t:performance.now()});};
 for(const type of ['pointerdown','pointermove','pointerup','pointercancel','mousedown','mouseup','mousemove','wheel','contextmenu'])document.addEventListener(type,e=>{const item={type,pointerType:e.pointerType,button:e.button,buttons:e.buttons,x:e.clientX,y:e.clientY,deltaX:e.deltaX,deltaY:e.deltaY,isTrusted:e.isTrusted,t:performance.now()};queue.push(item);document.querySelector('#state').textContent='Received '+(++count)+' events\n'+JSON.stringify(item,null,2);if(type==='contextmenu'||type==='wheel')e.preventDefault();},{passive:false});
 setInterval(flush,200);flush();
 </script>'''
