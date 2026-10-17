@@ -31,12 +31,13 @@ static xpc_object_t request(xpc_connection_t c,xpc_object_t object){
 static xpc_object_t operation(const char *name,xpc_object_t body){xpc_object_t p=dict();xpc_dictionary_set_value(p,name,body);return p;}
 static xpc_object_t codedString(const char *value){xpc_object_t v=dict();xpc_dictionary_set_string(v,"string",value);return v;}
 static xpc_object_t codedInt(int64_t value){xpc_object_t v=dict();xpc_dictionary_set_int64(v,"int",value);return v;}
-static uint64_t findMouse(xpc_object_t response){
+static uint64_t findMouse(xpc_object_t response,uint64_t expected){
     xpc_object_t list=xpc_dictionary_get_value(response,"connectedServices");
     if(!list || xpc_get_type(list)!=XPC_TYPE_ARRAY)return 0;
     for(size_t i=0;i<xpc_array_get_count(list);i++){
         xpc_object_t item=xpc_array_get_value(list,i);const char *product=xpc_dictionary_get_string(item,"Product");
-        if(product && strcmp(product,"Jw independent input probe")==0)return xpc_dictionary_get_uint64(item,"_ServiceID");
+        uint64_t sid=xpc_dictionary_get_uint64(item,"_ServiceID");
+        if(sid==expected && product && (strcmp(product,"Jw independent input probe")==0 || strcmp(product,"CD-Jw independent input probe")==0))return sid;
     }
     return 0;
 }
@@ -50,8 +51,10 @@ static void pointer(xpc_connection_t c,NSString *service,uint64_t sid,int dx,int
     xpc_connection_send_message(c,envelope(service,operation("send",body)));pauseFor(.2);
 }
 static void centerPointer(xpc_connection_t c,NSString *service,uint64_t sid){
+    static BOOL failed=NO;if(failed)return;
     NSString *kind=@(getenv("PROBE_DEVICE")?:"ipad");
-    NSURL *url=[NSURL URLWithString:[NSString stringWithFormat:@"http://127.0.0.1:8765/latest?device=%@-universal",kind]];
+    NSString *channel=getenv("PROBE_CHANNEL")?@(getenv("PROBE_CHANNEL")):[kind stringByAppendingString:@"-universal"];
+    NSURL *url=[NSURL URLWithString:[NSString stringWithFormat:@"http://127.0.0.1:8765/latest?device=%@",channel]];
     for(int i=0;i<20;i++){
         NSData *data=[NSURLConnection sendSynchronousRequest:[NSURLRequest requestWithURL:url cachePolicy:NSURLRequestReloadIgnoringLocalCacheData timeoutInterval:1] returningResponse:nil error:nil];
         NSDictionary *p=data?[NSJSONSerialization JSONObjectWithData:data options:0 error:nil]:nil;
@@ -59,6 +62,7 @@ static void centerPointer(xpc_connection_t c,NSString *service,uint64_t sid){
         else pointer(c,service,sid,30,40,0);
         pauseFor(.25);
     }
+    failed=YES;printf("Universal pointer calibration failed; no further recenter attempts\n");
 }
 static void tryIndependentMouse(xpc_connection_t c,NSString *service){
     // Descriptor shape comes from the service's actual connectedServices reply.
@@ -80,10 +84,11 @@ static void tryIndependentMouse(xpc_connection_t c,NSString *service){
     xpc_dictionary_set_value(codedPairs,"array",pairArray);xpc_dictionary_set_value(storage,"DeviceUsagePairs",codedPairs);
     xpc_object_t idvalue=dict();xpc_dictionary_set_uint64(idvalue,"uint",0xff0001);xpc_dictionary_set_value(storage,"_ServiceID",idvalue);
     xpc_dictionary_set_value(descriptor,"_CoreDevice_codablePropertyStorage",storage);
-    xpc_object_t body=dict();xpc_dictionary_set_value(body,"_0",descriptor);request(c,envelope(service,operation("createService",body)));
+    xpc_object_t body=dict();xpc_dictionary_set_value(body,"_0",descriptor);xpc_object_t created=request(c,envelope(service,operation("createService",body)));
+    uint64_t expected=created?xpc_dictionary_get_uint64(created,"serviceID"):0;
     pauseFor(2);
     xpc_object_t response=request(c,envelope(service,operation("connectedServices",dict())));
-    uint64_t sid=response?findMouse(response):0;
+    uint64_t sid=response && expected?findMouse(response,expected):0;
     if(!sid){printf("Independent mouse not listed; no reports sent\n");return;}
     centerPointer(c,service,sid);
     for(int b=1;b<=2;b++){pointer(c,service,sid,0,0,b);pointer(c,service,sid,0,0,0);}
