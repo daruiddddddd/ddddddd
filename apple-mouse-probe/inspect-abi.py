@@ -1,5 +1,5 @@
 """Read only the two relevant SimulatorKit wrapper functions for diagnostics."""
-import subprocess
+import subprocess,re
 from pathlib import Path
 dev=Path(subprocess.check_output(['xcode-select','-p'],text=True).strip())
 kit=dev.parent/'SharedFrameworks/SimulatorKit.framework/SimulatorKit'
@@ -21,16 +21,33 @@ for p in paths:
         (out/'dtuhid-symbols.txt').write_text(selected)
         (out/'dtuhid-symbols-demangled.txt').write_text(subprocess.check_output(['xcrun','swift-demangle'],input=selected,text=True))
         targets=['PointerReportV10buttonMasks5UInt8Vvg','PointerReportV1xSivg','PointerReportV1ySivg','PointerReportV5flagsAC5FlagsVvg','PointerReportV8reportIDAA0eG0VvgZ','PointerReportV21initialReportBitCountSivgZ','HIDDeviceTypeO4from']
+        named=[]
+        for row in symbols.splitlines():
+            match=re.match(r'([0-9a-f]+) [Tt] (.+)',row)
+            if match:named.append((int(match[1],16),match[2]))
+        named.sort();ranges=[]
+        for idx,(address,name) in enumerate(named):
+            if any(t in name for t in targets):
+                end=next((a for a,n in named[idx+1:] if a>address),address+2048)
+                ranges.append((address,min(end,address+2600),name))
         proc=subprocess.Popen(['otool','-tvV',str(p)],stdout=subprocess.PIPE,text=True)
         found=[];active=False;count=0;prefix=[]
         for line in proc.stdout:
             if len(prefix)<40:prefix.append(line)
+            match=re.match(r'([0-9a-f]{16})\s',line)
+            if match:
+                address=int(match[1],16)
+                for start,end,name in ranges:
+                    if start<=address<end:
+                        if address==start:found.append(name+':\n')
+                        found.append(line)
             if line.rstrip().endswith(':'):
                 active=any(t in line for t in targets) or ('PointerReport' in line and '.getter' in line) or ('HIDDeviceType' in line and 'init(from:' in line);count=0
             if active and count<650:found.append(line);count+=1
         proc.wait()
         (out/'pointer-report-layout.txt').write_text(''.join(found))
         (out/'dtuhid-disassembly-prefix.txt').write_text(''.join(prefix))
+        if not found:raise SystemExit('Pointer report disassembly missing')
         break
 for name in ['IndigoHIDMessageForPointerEventFromHIDEventRef','IndigoHIDMessageForScrollEventFromHIDEventRef','IndigoHIDMessageToCreatePointerService','IndigoHIDMessageToCreateMouseService','_hidEventFilterCallback']:
     p=subprocess.Popen(['xcrun','otool','-tvV',str(kit)],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
