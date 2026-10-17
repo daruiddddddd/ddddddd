@@ -19,6 +19,7 @@ typedef Event (*CreateFn)(CFAllocatorRef,uint32_t,uint64_t,uint32_t);
 typedef void (*AppendFn)(Event,Event,uint32_t);
 typedef void (*SetIntFn)(Event,uint32_t,int64_t);
 typedef void (*SetFloatFn)(Event,uint32_t,double);
+typedef int64_t (*GetIntFn)(Event,uint32_t);
 static id client;
 static MouseFn mouseEvent;
 static ScrollFn scrollEvent;
@@ -28,6 +29,7 @@ static CreateFn createEvent;
 static AppendFn appendEvent;
 static SetIntFn setInt;
 static SetFloatFn setFloat;
+static GetIntFn getInt;
 static uint32_t previousButtons=0;
 static int sent=0,rejected=0;
 static int callbacks=0;
@@ -47,17 +49,18 @@ static void deliver(void *p){
     sent++;settle(0.12);
 }
 static void mouse(double dx,double dy,uint32_t buttons){
+    if(dx==0 && dy==0 && buttons==previousButtons)return;
     Event e=mouseEvent(kCFAllocatorDefault,mach_absolute_time(),dx,dy,0,buttons,0);
     if(!e){rejected++;return;}
     // SimulatorKit rejects leaf pointer events. Include the raw motion and
     // changed button children, with number/state fields from IOHIDEventTypes.
-    Event motion=mouseEvent(kCFAllocatorDefault,mach_absolute_time(),dx,dy,0,buttons,0);
+    Event motion=(dx!=0||dy!=0)?mouseEvent(kCFAllocatorDefault,mach_absolute_time(),dx,dy,0,buttons,0):NULL;
     if(motion){appendEvent(e,motion,0);CFRelease(motion);}
     for(uint32_t n=1;n<=2;n++){
         uint32_t mask=1u<<(n-1);
         if(((buttons^previousButtons)&mask)==0)continue;
-        Event b=createEvent(kCFAllocatorDefault,2,mach_absolute_time(),0);
-        if(b){setInt(b,0x20000,buttons);setInt(b,0x20001,n);setInt(b,0x20002,1);setFloat(b,0x20003,(buttons&mask)?1:0);setInt(b,0x20004,(buttons&mask)?1:0);appendEvent(e,b,0);CFRelease(b);}
+        Event b=createEvent(kCFAllocatorDefault,2,mach_absolute_time(),1);
+        if(b){setInt(b,0x20000,buttons);setInt(b,0x20001,n);setInt(b,0x20002,1);setFloat(b,0x20003,(buttons&mask)?1:0);setInt(b,0x20004,(buttons&mask)?1:0);if(getInt)printf("button child mask=%lld number=%lld state=%lld\n",(long long)getInt(b,0x20000),(long long)getInt(b,0x20001),(long long)getInt(b,0x20004));appendEvent(e,b,0);CFRelease(b);}
     }
     previousButtons=buttons;
     printf("mouse dx=%g dy=%g buttons=%u hidType=%u\n",dx,dy,buttons,eventType?eventType(e):0);
@@ -103,6 +106,7 @@ int main(int argc,const char **argv){@autoreleasepool{
     appendEvent=(AppendFn)dlsym(io,"IOHIDEventAppendEvent");
     setInt=(SetIntFn)dlsym(io,"IOHIDEventSetIntegerValue");
     setFloat=(SetFloatFn)dlsym(io,"IOHIDEventSetFloatValue");
+    getInt=(GetIntFn)dlsym(io,"IOHIDEventGetIntegerValue");
     wrapMouse=(WrapFn)dlsym(kit,"IndigoHIDMessageForPointerEventFromHIDEventRef");
     wrapScroll=(WrapFn)dlsym(kit,"IndigoHIDMessageForScrollEventFromHIDEventRef");
     printf("symbols mouse=%d scroll=%d pointerWrapper=%d scrollWrapper=%d\n",mouseEvent!=NULL,scrollEvent!=NULL,wrapMouse!=NULL,wrapScroll!=NULL);
@@ -136,7 +140,7 @@ int main(int argc,const char **argv){@autoreleasepool{
     const uint32_t chords[4][5]={{0,1,3,1,0},{0,1,3,2,0},{0,2,3,2,0},{0,2,3,1,0}};
     for(int i=0;i<4;i++){
         printf("BEGIN chord %u %u %u %u %u\n",chords[i][0],chords[i][1],chords[i][2],chords[i][3],chords[i][4]);center();
-        for(int j=1;j<5;j++){mouse(0,0,chords[i][j]);if(chords[i][j]==3)for(int k=0;k<4;k++)mouse(12,10,3);}
+        for(int j=1;j<5;j++){mouse(0,0,chords[i][j]);if(chords[i][j]==3)for(int k=0;k<4;k++)mouse(12,10,3);if(j==3){settle(.5);mouse(2,0,chords[i][j]);settle(.5);}}
     }
     center();
     if(scrollEvent&&wrapScroll){for(int d=-1;d<=1;d+=2){Event e=scrollEvent(kCFAllocatorDefault,mach_absolute_time(),0,d*120,0,0);if(e){deliver(wrapScroll(e,0x36));CFRelease(e);}}}
