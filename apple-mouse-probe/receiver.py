@@ -38,7 +38,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         parsed=urlparse(self.path)
         device=parse_qs(parsed.query).get('device',[''])[0]
-        if parsed.path!='/events' or device not in ('iphone','ipad','iphone-native','ipad-native'):
+        if parsed.path!='/events' or device not in ('iphone','ipad','iphone-native','ipad-native','iphone-universal','ipad-universal'):
             self.send_error(400);return
         size=int(self.headers.get('Content-Length','0'))
         if size>1048576:
