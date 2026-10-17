@@ -34,11 +34,21 @@ static void mouse(double dx,double dy,uint32_t buttons){
 }
 static void center(void){mouse(-4000,-4000,0);mouse(200,300,0);}
 int main(int argc,const char **argv){@autoreleasepool{
+    setvbuf(stdout,NULL,_IONBF,0);
+    setvbuf(stderr,NULL,_IONBF,0);
     if(argc!=3){fprintf(stderr,"usage: injector developer-dir simulator-udid\n");return 2;}
     NSString *dev=@(argv[1]),*udid=@(argv[2]);
     void *core=dlopen("/Library/Developer/PrivateFrameworks/CoreSimulator.framework/CoreSimulator",RTLD_NOW|RTLD_GLOBAL);
-    NSString *path=[dev stringByAppendingPathComponent:@"Library/PrivateFrameworks/SimulatorKit.framework/SimulatorKit"];
-    void *kit=dlopen(path.UTF8String,RTLD_NOW|RTLD_GLOBAL);
+    if(!core)fprintf(stderr,"CoreSimulator load failed: %s\n",dlerror());
+    NSArray *kitPaths=@[[[dev stringByDeletingLastPathComponent] stringByAppendingPathComponent:@"SharedFrameworks/SimulatorKit.framework/SimulatorKit"],[dev stringByAppendingPathComponent:@"Library/PrivateFrameworks/SimulatorKit.framework/SimulatorKit"]];
+    void *kit=NULL;
+    for(NSString *path in kitPaths){
+        if(![[NSFileManager defaultManager] fileExistsAtPath:path])continue;
+        printf("Loading %s\n",path.UTF8String);
+        kit=dlopen(path.UTF8String,RTLD_NOW|RTLD_GLOBAL);
+        if(kit)break;
+        fprintf(stderr,"SimulatorKit load failed: %s\n",dlerror());
+    }
     void *io=dlopen("/System/Library/Frameworks/IOKit.framework/IOKit",RTLD_NOW|RTLD_GLOBAL);
     if(!core||!kit||!io){fprintf(stderr,"framework unavailable: %s\n",dlerror());return 3;}
     mouseEvent=(MouseFn)dlsym(io,"IOHIDEventCreateMouseEvent");
@@ -51,15 +61,18 @@ int main(int argc,const char **argv){@autoreleasepool{
     Class contextClass=NSClassFromString(@"SimServiceContext");
     SEL ctxSel=NSSelectorFromString(@"sharedServiceContextForDeveloperDir:error:");
     NSError *error=nil;
-    if(![contextClass respondsToSelector:ctxSel])return 5;
+    if(![contextClass respondsToSelector:ctxSel]){fprintf(stderr,"context selector unavailable\n");return 5;}
+    printf("Creating CoreSimulator context\n");
     id context=((id(*)(id,SEL,id,NSError**))objc_msgSend)(contextClass,ctxSel,dev,&error);
     SEL setSel=NSSelectorFromString(@"defaultDeviceSetWithError:");
-    if(![context respondsToSelector:setSel])return 6;
+    if(![context respondsToSelector:setSel]){fprintf(stderr,"device set selector unavailable: %s\n",error.description.UTF8String);return 6;}
+    printf("Resolving device set\n");
     id set=((id(*)(id,SEL,NSError**))objc_msgSend)(context,setSel,&error),device=nil;
     for(id candidate in [set valueForKey:@"availableDevices"]){if([[[candidate valueForKey:@"UDID"] UUIDString] isEqualToString:udid]){device=candidate;break;}}
     Class hid=NSClassFromString(@"_TtC12SimulatorKit24SimDeviceLegacyHIDClient");
     SEL init=NSSelectorFromString(@"initWithDevice:error:");
     if(!device||!hid||![hid instancesRespondToSelector:init]){fprintf(stderr,"device/HID client unavailable\n");return 7;}
+    printf("Initializing HID client\n");
     client=((id(*)(id,SEL,id,NSError**))objc_msgSend)([hid alloc],init,device,&error);
     SEL sendSel=NSSelectorFromString(@"sendWithMessage:freeWhenDone:completionQueue:completion:");
     if(![client respondsToSelector:sendSel]){fprintf(stderr,"send selector unavailable\n");return 8;}
