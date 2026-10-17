@@ -63,7 +63,7 @@ static void mouse(double dx,double dy,uint32_t buttons){
         if(b){setInt(b,0x20000,buttons);setInt(b,0x20001,n);setInt(b,0x20002,1);setFloat(b,0x20003,(buttons&mask)?1:0);setInt(b,0x20004,(buttons&mask)?1:0);if(getInt)printf("button child mask=%lld number=%lld state=%lld\n",(long long)getInt(b,0x20000),(long long)getInt(b,0x20001),(long long)getInt(b,0x20004));appendEvent(e,b,0);CFRelease(b);}
     }
     previousButtons=buttons;
-    printf("mouse dx=%g dy=%g buttons=%u hidType=%u\n",dx,dy,buttons,eventType?eventType(e):0);
+    printf("mouse time=%.6f dx=%g dy=%g buttons=%u hidType=%u\n",NSDate.date.timeIntervalSince1970,dx,dy,buttons,eventType?eventType(e):0);
     deliver(wrapMouse(e,0x36));CFRelease(e);
 }
 static BOOL calibrationFailed=NO;
@@ -140,7 +140,7 @@ int main(int argc,const char **argv){@autoreleasepool{
     const uint32_t chords[4][5]={{0,1,3,1,0},{0,1,3,2,0},{0,2,3,2,0},{0,2,3,1,0}};
     for(int i=0;i<4;i++){
         printf("BEGIN chord %u %u %u %u %u\n",chords[i][0],chords[i][1],chords[i][2],chords[i][3],chords[i][4]);center();
-        for(int j=1;j<5;j++){mouse(0,0,chords[i][j]);if(chords[i][j]==3)for(int k=0;k<4;k++)mouse(12,10,3);if(j==3){settle(.5);mouse(2,0,chords[i][j]);settle(.5);}}
+        for(int j=1;j<5;j++){mouse(0,0,chords[i][j]);if(chords[i][j]==3)for(int k=0;k<4;k++)mouse(12,10,3);if(j==3)settle(1);}
     }
     center();
     if(scrollEvent&&wrapScroll){for(int d=-1;d<=1;d+=2){Event e=scrollEvent(kCFAllocatorDefault,mach_absolute_time(),0,d*120,0,0);if(e){deliver(wrapScroll(e,0x36));CFRelease(e);}}}
