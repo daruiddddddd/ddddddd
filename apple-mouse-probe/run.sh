@@ -57,12 +57,12 @@ import sys,time
 import subprocess
 from pathlib import Path
 kind,udid=sys.argv[1:]
-p=Path('output')/(kind+'-events.jsonl')
+p=Path('output')/(kind+'-universal-events.jsonl')
 with (Path('output')/(kind+'-open.log')).open('w') as log:
     for attempt in range(2):
         if p.exists() and 'page-ready' in p.read_text():break
         print('Opening Safari',kind,'attempt',attempt+1,flush=True)
-        for args in [['launch',udid,'com.apple.mobilesafari'],['openurl',udid,'http://127.0.0.1:8765/?device='+kind]]:
+        for args in [['launch',udid,'com.apple.mobilesafari'],['openurl',udid,'http://127.0.0.1:8765/?device='+kind+'-universal']]:
             try: subprocess.run(['xcrun','simctl',*args],stdout=log,stderr=log,timeout=30)
             except subprocess.TimeoutExpired: log.write('command timeout\n')
         for _ in range(20):
@@ -70,7 +70,9 @@ with (Path('output')/(kind+'-open.log')).open('w') as log:
             time.sleep(1)
     print('Safari ready:',p.exists() and 'page-ready' in p.read_text(),flush=True)
 PY
-  python3 bounded.py 35 output/universal "$(xcode-select -p)" "$udid" >"output/$kind-universal.log" 2>&1 || true
+  python3 bounded.py 65 output/universal "$(xcode-select -p)" "$udid" >"output/$kind-universal.log" 2>&1 || true
+  python3 bounded.py 30 xcrun simctl openurl "$udid" "http://127.0.0.1:8765/?device=$kind" >"output/$kind-legacy-page.log" 2>&1 || true
+  sleep 5
   python3 bounded.py 90 output/injector "$(xcode-select -p)" "$udid" >"output/$kind-injector.log" 2>&1 || true
   head -35 "output/$kind-injector.log"
   sleep 2
