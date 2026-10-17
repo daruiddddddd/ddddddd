@@ -35,14 +35,18 @@ static NSUInteger receivedButtons(GCMouseInput *input){return [buttonStates[[NSV
 static void observeMouse(GCMouse *mouse) {
     if(!mouse || [observedMice containsObject:mouse])return;
     [observedMice addObject:mouse]; mouse.handlerQueue=dispatch_get_main_queue();
-    record(@{@"source":@"GCMouse",@"type":@"connected",@"category":mouse.productCategory?:@"",@"vendor":mouse.vendorName?:@""});
+    NSUInteger mouseId=observedMice.count;
+    record(@{@"source":@"GCMouse",@"type":@"connected",@"mouseId":@(mouseId),@"category":mouse.productCategory?:@"",@"vendor":mouse.vendorName?:@""});
     GCMouseInput *input=mouse.mouseInput;
     buttonStates[[NSValue valueWithNonretainedObject:input]]=@(buttons(input));
-    input.mouseMovedHandler=^(GCMouseInput *m,float dx,float dy){ record(@{@"source":@"GCMouse",@"type":@"move",@"dx":@(dx),@"dy":@(dy),@"buttons":@(receivedButtons(m))}); };
+    input.mouseMovedHandler=^(GCMouseInput *m,float dx,float dy){ record(@{@"source":@"GCMouse",@"type":@"move",@"mouseId":@(mouseId),@"dx":@(dx),@"dy":@(dy),@"buttons":@(receivedButtons(m))}); };
     for(NSDictionary *entry in @[@{@"name":@"left",@"button":input.leftButton?:NSNull.null},@{@"name":@"right",@"button":input.rightButton?:NSNull.null},@{@"name":@"middle",@"button":input.middleButton?:NSNull.null}]) {
         if(entry[@"button"]==NSNull.null)continue;
         GCControllerButtonInput *button=entry[@"button"];
         NSString *name=entry[@"name"];
+        if([NSProcessInfo.processInfo.arguments containsObject:@"--direct-buttons"])
+            button.preferredSystemGestureState=GCSystemGestureStateDisabled;
+        record(@{@"source":@"GCMouse",@"type":@"button-policy",@"mouseId":@(mouseId),@"name":name,@"boundToSystemGesture":@(button.isBoundToSystemGesture),@"preferredSystemGestureState":@(button.preferredSystemGestureState)});
         button.pressedChangedHandler=^(GCControllerButtonInput *b,float value,BOOL pressed){
             // Use the delivered edge, not a later poll of the device. UIKit can
             // queue callbacks while rendering, so isPressed may already differ.
@@ -50,8 +54,8 @@ static void observeMouse(GCMouse *mouse) {
             NSUInteger previous=receivedButtons(input);
             bridgeButtons=pressed?(previous|bit):(previous&~bit);
             buttonStates[[NSValue valueWithNonretainedObject:input]]=@(bridgeButtons);
-            record(@{@"source":@"GCMouse",@"type":@"button",@"name":name,@"pressed":@(pressed),@"value":@(value),@"buttons":@(bridgeButtons),@"polledButtons":@(buttons(input))});
-            bridge(@{@"type":@"native-button",@"api":@"GCMouse",@"name":name,@"pressed":@(pressed)});
+            record(@{@"source":@"GCMouse",@"type":@"button",@"mouseId":@(mouseId),@"name":name,@"pressed":@(pressed),@"value":@(value),@"buttons":@(bridgeButtons),@"polledButtons":@(buttons(input))});
+            bridge(@{@"type":@"native-button",@"api":@"GCMouse",@"mouseId":@(mouseId),@"name":name,@"pressed":@(pressed)});
         };
     }
     input.scroll.valueChangedHandler=^(GCControllerDirectionPad *pad,float x,float y){ record(@{@"source":@"GCMouse",@"type":@"scroll",@"x":@(x),@"y":@(y),@"buttons":@(buttons(input))}); bridge(@{@"type":@"native-scroll",@"api":@"GCMouse",@"deltaX":@(x),@"deltaY":@(y)}); };
