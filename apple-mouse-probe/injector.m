@@ -31,6 +31,7 @@ static SetFloatFn setFloat;
 static uint32_t previousButtons=0;
 static int sent=0,rejected=0;
 static int callbacks=0;
+static int callbackErrors=0;
 static void settle(double seconds){
     NSDate *until=[NSDate dateWithTimeIntervalSinceNow:seconds];
     while([until timeIntervalSinceNow]>0){
@@ -41,9 +42,9 @@ static void settle(double seconds){
 static void deliver(void *p){
     if(!p){rejected++;fprintf(stderr,"wrapper returned nil\n");return;}
     SEL s=NSSelectorFromString(@"sendWithMessage:freeWhenDone:completionQueue:completion:");
-    void (^done)(void)=^{callbacks++;};
+    void (^done)(NSError*)=^(NSError *error){callbacks++;if(error){callbackErrors++;fprintf(stderr,"HID callback error %s\n",error.description.UTF8String);}};
     ((void(*)(id,SEL,void*,BOOL,id,id))objc_msgSend)(client,s,p,YES,dispatch_get_main_queue(),done);
-    sent++;settle(0.04);
+    sent++;settle(0.12);
 }
 static void mouse(double dx,double dy,uint32_t buttons){
     Event e=mouseEvent(kCFAllocatorDefault,mach_absolute_time(),dx,dy,0,buttons,0);
@@ -62,7 +63,21 @@ static void mouse(double dx,double dy,uint32_t buttons){
     printf("mouse dx=%g dy=%g buttons=%u hidType=%u\n",dx,dy,buttons,eventType?eventType(e):0);
     deliver(wrapMouse(e,0x36));CFRelease(e);
 }
-static void center(void){mouse(-4000,-4000,0);mouse(200,300,0);}
+static BOOL calibrationFailed=NO;
+static void center(void){
+    if(calibrationFailed)return;
+    NSString *kind=@(getenv("PROBE_DEVICE")?:"ipad");
+    NSURL *url=[NSURL URLWithString:[@"http://127.0.0.1:8765/latest?device=" stringByAppendingString:kind]];
+    for(int i=0;i<24;i++){
+        NSData *data=[NSURLConnection sendSynchronousRequest:[NSURLRequest requestWithURL:url cachePolicy:NSURLRequestReloadIgnoringLocalCacheData timeoutInterval:1] returningResponse:NULL error:NULL];
+        NSDictionary *position=data?[NSJSONSerialization JSONObjectWithData:data options:0 error:NULL]:nil;
+        double x=[position[@"x"] doubleValue],y=[position[@"y"] doubleValue];
+        double width=[position[@"width"] doubleValue],height=[position[@"height"] doubleValue];
+        if(position[@"x"] && x>100 && y>100 && x<width-150 && y<height-150){printf("Page mouse position confirmed x=%g y=%g\n",x,y);return;}
+        mouse(60,70,0);settle(.25);
+    }
+    calibrationFailed=YES;printf("Page mouse position unavailable; do not interpret button tests as a platform result\n");
+}
 int main(int argc,const char **argv){@autoreleasepool{
     setvbuf(stdout,NULL,_IONBF,0);
     setvbuf(stderr,NULL,_IONBF,0);
@@ -129,8 +144,8 @@ int main(int argc,const char **argv){@autoreleasepool{
     // Positive control only. Touch reception is never classified as mouse parity.
     typedef void *(*TouchFn)(CGPoint*,CGPoint*,uint32_t,NSUInteger,CGSize,uint32_t);
     TouchFn touch=(TouchFn)dlsym(kit,"IndigoHIDMessageForMouseNSEvent");
-    if(touch){printf("BEGIN touch positive control; excluded from mouse pass\n");CGPoint p=CGPointMake(.5,.4);CGSize size=CGSizeMake(1,1);deliver(touch(&p,NULL,0x32,1,size,0));settle(.15);deliver(touch(&p,NULL,0x32,2,size,0));settle(2);}
+    if(touch&&calibrationFailed){printf("BEGIN touch positive control; excluded from mouse pass\n");CGPoint p=CGPointMake(.5,.4);CGSize size=CGSizeMake(1,1);deliver(touch(&p,NULL,0x32,1,size,0));settle(.15);deliver(touch(&p,NULL,0x32,2,size,0));settle(2);}
     ServiceFn remove=(ServiceFn)dlsym(kit,"IndigoHIDMessageToRemovePointerService");if(remove)deliver(remove());
-    printf("sent=%d rejected=%d callbacks=%d; inspect Safari receiver logs before drawing any conclusion\n",sent,rejected,callbacks);
+    printf("sent=%d rejected=%d callbacks=%d callbackErrors=%d; inspect Safari receiver logs before drawing any conclusion\n",sent,rejected,callbacks,callbackErrors);
     return rejected?9:0;
 }}
