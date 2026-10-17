@@ -20,12 +20,12 @@ for p in paths:
         selected='\n'.join(s for s in symbols.splitlines() if any(t in s for t in ['UniversalHIDRequest','HIDDeviceType','PointerReport','ScrollReport']))
         (out/'dtuhid-symbols.txt').write_text(selected)
         (out/'dtuhid-symbols-demangled.txt').write_text(subprocess.check_output(['xcrun','swift-demangle'],input=selected,text=True))
-        targets=['PointerReportV10buttonMasks5UInt8Vvg','PointerReportV1xSivg','PointerReportV1ySivg','PointerReportV5flagsAC5FlagsVvg','PointerReportV8reportIDAA0eG0VvgZ','PointerReportV21initialReportBitCountSivgZ','HIDDeviceTypeO4from']
+        targets=['PointerReportV10buttonMasks5UInt8Vvg','PointerReportV1xSivg','PointerReportV1ySivg','PointerReportV5flagsAC5FlagsVvg','PointerReportV8reportIDAA0eG0VvgZ','PointerReportV07initialE8BitCountSivgZ','PointerReportV6accelXSdvg','PointerReportV6accelYSdvg','PointerReportV15remoteTimestamps6UInt64VSgvg','HIDDeviceTypeO4from']
         named=[]
         for row in symbols.splitlines():
             match=re.match(r'([0-9a-f]+) [Tt] (.+)',row)
             if match:named.append((int(match[1],16),match[2]))
-        named.sort();ranges=[]
+        named.sort();ranges=[(0x10005824c,0x10005897c,'HIDDeviceType decoder implementation (Xcode27 build inspected)')]
         for idx,(address,name) in enumerate(named):
             if any(t in name for t in targets):
                 end=next((a for a,n in named[idx+1:] if a>address),address+2048)
