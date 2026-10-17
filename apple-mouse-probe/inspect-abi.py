@@ -20,6 +20,15 @@ for p in paths:
         selected='\n'.join(s for s in symbols.splitlines() if any(t in s for t in ['UniversalHIDRequest','HIDDeviceType','PointerReport','ScrollReport']))
         (out/'dtuhid-symbols.txt').write_text(selected)
         (out/'dtuhid-symbols-demangled.txt').write_text(subprocess.check_output(['xcrun','swift-demangle'],input=selected,text=True))
+        targets=['PointerReportV10buttonMasks5UInt8Vvg','PointerReportV1xSivg','PointerReportV1ySivg','PointerReportV5flagsAC5FlagsVvg','PointerReportV8reportIDAA0eG0VvgZ','PointerReportV21initialReportBitCountSivgZ','HIDDeviceTypeO4from']
+        proc=subprocess.Popen(['otool','-tvV',str(p)],stdout=subprocess.PIPE,text=True)
+        found=[];active=False;count=0
+        for line in proc.stdout:
+            if line.rstrip().endswith(':'):
+                active=any(t in line for t in targets);count=0
+            if active and count<650:found.append(line);count+=1
+        proc.wait()
+        (out/'pointer-report-layout.txt').write_text(''.join(found))
         break
 for name in ['IndigoHIDMessageForPointerEventFromHIDEventRef','IndigoHIDMessageForScrollEventFromHIDEventRef','IndigoHIDMessageToCreatePointerService','IndigoHIDMessageToCreateMouseService','_hidEventFilterCallback']:
     p=subprocess.Popen(['xcrun','otool','-tvV',str(kit)],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
