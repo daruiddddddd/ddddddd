@@ -9,10 +9,11 @@ out=Path(__file__).resolve().parent/'output';out.mkdir(exist_ok=True)
 strings=subprocess.check_output(['strings',str(kit)],text=True)
 (out/'hid-transport-strings.txt').write_text('\n'.join(s for s in strings.splitlines() if any(t.lower() in s.lower() for t in ['IndigoPointer','IndigoMouse','DTUHID','remote.hid','sendWithMessage','PointerService','MouseService','pointerEvent','mouseEvent','scrollEvent'])))
 for p in Path('/Library/Developer/PrivateFrameworks/CoreSimulator.framework').rglob('*dtuhid*'):
-    if p.is_file():
+    if p.is_file() and p.name=='dtuhidd' and '/iOS/' in str(p):
         (out/'dtuhid-path.txt').write_text(str(p))
         data=subprocess.check_output(['strings',str(p)],text=True,errors='replace')
         (out/'dtuhid-strings.txt').write_text(data)
+        (out/'dtuhid-libraries.txt').write_text(subprocess.check_output(['otool','-L',str(p)],text=True))
 for name in ['IndigoHIDMessageForPointerEventFromHIDEventRef','IndigoHIDMessageForScrollEventFromHIDEventRef','IndigoHIDMessageToCreatePointerService','IndigoHIDMessageToCreateMouseService','_hidEventFilterCallback']:
     p=subprocess.Popen(['xcrun','otool','-tvV',str(kit)],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
     lines=[]
