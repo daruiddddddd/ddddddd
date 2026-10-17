@@ -29,6 +29,7 @@ if len(plan)!=(1 if os.environ.get('PROBE_DEVICE') else 2):raise SystemExit('Req
 PY
 xcrun clang -fobjc-arc -fblocks -framework Foundation -framework CoreFoundation -framework IOKit injector.m -o output/injector 2>output/compile.log || { cat output/compile.log; exit 1; }
 bash build-native.sh >output/native-compile.log 2>&1 || { cat output/native-compile.log; exit 1; }
+xcrun clang -fobjc-arc -fblocks -framework Foundation universal.m -o output/universal 2>output/universal-compile.log || { cat output/universal-compile.log; exit 1; }
 cat output/plan.json
 kit="$(xcode-select -p)/Library/PrivateFrameworks/SimulatorKit.framework/SimulatorKit"
 if [[ ! -f "$kit" ]]; then kit="$(xcode-select -p)/../SharedFrameworks/SimulatorKit.framework/SimulatorKit"; fi
@@ -66,6 +67,7 @@ with (Path('output')/(kind+'-open.log')).open('w') as log:
             time.sleep(1)
     print('Safari ready:',p.exists() and 'page-ready' in p.read_text(),flush=True)
 PY
+  python3 bounded.py 35 output/universal "$(xcode-select -p)" "$udid" >"output/$kind-universal.log" 2>&1 || true
   python3 bounded.py 90 output/injector "$(xcode-select -p)" "$udid" >"output/$kind-injector.log" 2>&1 || true
   head -35 "output/$kind-injector.log"
   sleep 2
