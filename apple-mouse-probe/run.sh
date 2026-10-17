@@ -108,7 +108,7 @@ PY
     phases=(policy-default policy-direct)
     if [[ "${PROBE_FOCUS:-}" == "native-repeat" ]]; then phases=(repeat-first repeat-reused repeat-recreated);fi
     for phase in "${phases[@]}"; do
-      if [[ "$phase" == "policy-direct" ]]; then
+      if [[ "$phase" == "policy-direct" || "${PROBE_DIRECT_BUTTONS:-}" == "1" ]]; then
         python3 bounded.py 30 xcrun simctl launch "$udid" org.jwprobe.nativeinput --probe-phase "$phase" --direct-buttons >"output/$kind-$phase-launch.log" 2>&1
       else
         python3 bounded.py 30 xcrun simctl launch "$udid" org.jwprobe.nativeinput --probe-phase "$phase" >"output/$kind-$phase-launch.log" 2>&1
