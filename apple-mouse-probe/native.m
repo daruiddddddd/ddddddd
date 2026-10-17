@@ -92,10 +92,18 @@ static void observeMouse(GCMouse *mouse) {
 }
 - (void)viewDidLoad {
     [super viewDidLoad];
-    WKWebView *web=[[WKWebView alloc] initWithFrame:self.view.bounds];
+    WKWebView *web=[[WKWebView alloc] initWithFrame:CGRectZero];
     bridgeView=web;
-    web.autoresizingMask=UIViewAutoresizingFlexibleWidth|UIViewAutoresizingFlexibleHeight;
+    // Match UIKit-local and CSS viewport coordinates. Automatic scroll insets
+    // previously added the status-bar height (32/62 points in captured runs).
+    web.translatesAutoresizingMaskIntoConstraints=NO;
+    web.scrollView.contentInsetAdjustmentBehavior=UIScrollViewContentInsetAdjustmentNever;
     [self.view addSubview:web];
+    UILayoutGuide *safe=self.view.safeAreaLayoutGuide;
+    [NSLayoutConstraint activateConstraints:@[[web.leadingAnchor constraintEqualToAnchor:safe.leadingAnchor],
+        [web.trailingAnchor constraintEqualToAnchor:safe.trailingAnchor],
+        [web.topAnchor constraintEqualToAnchor:safe.topAnchor],
+        [web.bottomAnchor constraintEqualToAnchor:safe.bottomAnchor]]];
     NSString *kind=UIDevice.currentDevice.userInterfaceIdiom==UIUserInterfaceIdiomPad?@"ipad":@"iphone";
     NSString *phase=self.prefersPointerLocked?@"locked":@"native";
     NSArray *args=NSProcessInfo.processInfo.arguments;NSUInteger arg=[args indexOfObject:@"--probe-phase"];
