@@ -68,6 +68,10 @@ with (Path('output')/(kind+'-open.log')).open('w') as log:
     print('Safari ready:',p.exists() and 'page-ready' in p.read_text(),flush=True)
 PY
   if [[ "$kind" == "iphone" ]]; then
+    if [[ "${PROBE_FOCUS:-}" == "native-policy" ]]; then
+      python3 bounded.py 35 xcrun simctl spawn "$udid" "$(pwd)/output/accessibility-setup" 1 >"output/$kind-accessibility-setup.log" 2>&1 || true
+      sleep 20
+    else
     python3 bounded.py 35 xcrun simctl spawn "$udid" "$(pwd)/output/accessibility-setup" 0 >"output/$kind-accessibility-baseline.log" 2>&1 || true
     python3 bounded.py 30 xcrun simctl openurl "$udid" "http://127.0.0.1:8765/?device=$kind-off-before" >"output/$kind-off-before-open.log" 2>&1 || true
     sleep 8
@@ -75,6 +79,37 @@ PY
     python3 bounded.py 30 xcrun simctl openurl "$udid" "http://127.0.0.1:8765/?device=$kind-universal" >>"output/$kind-open.log" 2>&1 || true
     python3 bounded.py 35 xcrun simctl spawn "$udid" "$(pwd)/output/accessibility-setup" 1 >"output/$kind-accessibility-setup.log" 2>&1 || true
     sleep 20
+    fi
+  fi
+  if [[ "${PROBE_FOCUS:-}" == "native-policy" ]]; then
+    python3 bounded.py 45 xcrun simctl install "$udid" output/NativeProbe.app >"output/$kind-native-install.log" 2>&1 || python3 bounded.py 45 xcrun simctl install "$udid" output/NativeProbe.app >>"output/$kind-native-install.log" 2>&1
+    for phase in policy-default policy-direct; do
+      if [[ "$phase" == "policy-direct" ]]; then
+        python3 bounded.py 30 xcrun simctl launch "$udid" org.jwprobe.nativeinput --probe-phase "$phase" --direct-buttons >"output/$kind-$phase-launch.log" 2>&1
+      else
+        python3 bounded.py 30 xcrun simctl launch "$udid" org.jwprobe.nativeinput --probe-phase "$phase" >"output/$kind-$phase-launch.log" 2>&1
+      fi
+      python3 - "$kind-$phase" <<'PY'
+import sys,time
+from pathlib import Path
+p=Path('output')/(sys.argv[1]+'-events.jsonl')
+for _ in range(30):
+    if p.exists() and 'page-ready' in p.read_text():break
+    time.sleep(1)
+print('Native policy page ready:',p.exists() and 'page-ready' in p.read_text(),flush=True)
+PY
+      PROBE_DEVICE="$kind-$phase" python3 bounded.py 90 output/injector "$(xcode-select -p)" "$udid" >"output/$kind-$phase-injector.log" 2>&1 || true
+      sleep 2
+      container="$(xcrun simctl get_app_container "$udid" org.jwprobe.nativeinput data)"
+      cp "$container/Documents/native-events.jsonl" "output/$kind-$phase-api.jsonl"
+      python3 bounded.py 20 xcrun simctl terminate "$udid" org.jwprobe.nativeinput >>"output/$kind-$phase-launch.log" 2>&1 || true
+    done
+    if [[ "$kind" == "iphone" ]]; then
+      python3 bounded.py 20 xcrun simctl spawn "$udid" "$(pwd)/output/accessibility-setup" 0 >"output/$kind-accessibility-restore.log" 2>&1 || true
+    fi
+    python3 bounded.py 20 xcrun simctl shutdown "$udid" >>"output/$kind-boot.log" 2>&1 || true
+    current_device=''
+    continue
   fi
   python3 bounded.py 65 output/universal "$(xcode-select -p)" "$udid" >"output/$kind-universal.log" 2>&1 || true
   python3 bounded.py 30 xcrun simctl openurl "$udid" "http://127.0.0.1:8765/?device=$kind" >"output/$kind-legacy-page.log" 2>&1 || true
