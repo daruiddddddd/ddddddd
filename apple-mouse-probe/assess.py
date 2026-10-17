@@ -3,7 +3,7 @@ import json,os
 from pathlib import Path
 
 def assess(events):
-    pointers=[e for e in events if e.get('type','').startswith('pointer') and e.get('pointerType')=='mouse' and e.get('isTrusted')]
+    pointers=[e for e in events if e.get('type','').startswith('pointer') and e.get('pointerType')=='mouse' and e.get('isTrusted') and e.get('x',-1)>=0 and e.get('y',-1)>=0]
     runs=[];active=None
     for e in pointers:
         b=e.get('buttons',0)
