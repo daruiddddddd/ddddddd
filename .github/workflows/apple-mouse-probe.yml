@@ -21,6 +21,7 @@ jobs:
           path: apple-mouse-probe/output/
           retention-days: 7
   safari-input:
+    if: ${{ !contains(github.event.head_commit.message, '[diagnostics]') }}
     runs-on: xcode-27
     timeout-minutes: 12
     strategy:
