@@ -137,7 +137,8 @@ int main(int argc,const char **argv){@autoreleasepool{
     client=((id(*)(id,SEL,id,NSError**))objc_msgSend)([hid alloc],init,device,&error);
     SEL sendSel=NSSelectorFromString(@"sendWithMessage:freeWhenDone:completionQueue:completion:");
     if(![client respondsToSelector:sendSel]){fprintf(stderr,"send selector unavailable\n");return 8;}
-    for(const char **name=(const char*[]){"IndigoHIDMessageToCreatePointerService","IndigoHIDMessageToCreateMouseService",NULL};*name;name++){
+    if(getenv("PROBE_REUSE_SERVICES"))printf("Reusing previously created pointer/mouse services\n");
+    else for(const char **name=(const char*[]){"IndigoHIDMessageToCreatePointerService","IndigoHIDMessageToCreateMouseService",NULL};*name;name++){
         ServiceFn f=(ServiceFn)dlsym(kit,*name);printf("service %s available=%d\n",*name,f!=NULL);if(f)deliver(f());
     }
     settle(3);
@@ -157,7 +158,7 @@ int main(int argc,const char **argv){@autoreleasepool{
     typedef void *(*TouchFn)(CGPoint*,CGPoint*,uint32_t,NSUInteger,CGSize,uint32_t);
     TouchFn touch=(TouchFn)dlsym(kit,"IndigoHIDMessageForMouseNSEvent");
     if(touch&&calibrationFailed){printf("BEGIN touch positive control; excluded from mouse pass\n");CGPoint p=CGPointMake(.5,.4);CGSize size=CGSizeMake(1,1);deliver(touch(&p,NULL,0x32,1,size,0));settle(.15);deliver(touch(&p,NULL,0x32,2,size,0));settle(2);}
-    ServiceFn remove=(ServiceFn)dlsym(kit,"IndigoHIDMessageToRemovePointerService");if(remove)deliver(remove());
+    ServiceFn remove=(ServiceFn)dlsym(kit,"IndigoHIDMessageToRemovePointerService");if(remove&&!getenv("PROBE_KEEP_SERVICES"))deliver(remove());
     printf("sent=%d rejected=%d callbacks=%d callbackErrors=%d; inspect Safari receiver logs before drawing any conclusion\n",sent,rejected,callbacks,callbackErrors);
     return rejected?9:0;
 }}
