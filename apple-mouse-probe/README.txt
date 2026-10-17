@@ -4,7 +4,7 @@ This package contains only an independent input receiver, an experimental
 SimulatorKit mouse injector, and a bounded CI job. No Jw executable, drawing,
 account details, or private project files are included.
 
-The workflow uses the standard macos-26 GitHub-hosted runner. Public-repository
+The workflow uses the standard xcode-27 GitHub-hosted runner. Public-repository
 standard runners are free under GitHub's published policy. It runs for at most
 25 minutes and retains diagnostic artifacts for 7 days. No recurring schedule.
 
@@ -33,4 +33,7 @@ The workflow runs on a relevant push or manually, with read-only permissions.
 Run locally only on an isolated Mac allocated for these tests:
   bash apple-mouse-probe/run.sh
 
-Current status: prepared on Windows; macOS compilation/execution NOT yet done.
+Run 1 (39031707440): compiled on macOS 26.6.2 / Xcode 26.6. iOS 26.5
+simulator boot completed, but Safari openurl timed out before input was sent.
+This is not a mouse compatibility result. The next run uses xcode-27 and
+records retries, startup screenshots and input diagnostics for both devices.
