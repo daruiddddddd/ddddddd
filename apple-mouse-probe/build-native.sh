@@ -4,6 +4,8 @@ mkdir -p output/NativeProbe.app
 sdk="$(xcrun --sdk iphonesimulator --show-sdk-path)"
 arch="$(uname -m)"
 xcrun clang -fobjc-arc -fblocks -target "$arch-apple-ios17.0-simulator" -isysroot "$sdk" -framework UIKit -framework Foundation -framework GameController -framework WebKit native.m -o output/NativeProbe.app/NativeProbe
+xcrun clang -fobjc-arc -target "$arch-apple-ios17.0-simulator" -isysroot "$sdk" -framework UIKit -framework Foundation accessibility-setup.m -o output/accessibility-setup
+codesign --force --sign - output/accessibility-setup
 python3 - <<'PY'
 import plistlib
 from pathlib import Path
