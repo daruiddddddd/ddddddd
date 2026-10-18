@@ -10,15 +10,21 @@ OUT.mkdir(exist_ok=True)
 LOCK = threading.Lock()
 STATE = {}
 HTML = r'''<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Apple mouse input receiver</title><style>html,body{margin:0;width:100%;height:100%;overflow:hidden;touch-action:none;font:16px system-ui;background:#edf5fb}pre{pointer-events:none;white-space:pre-wrap;padding:20px}</style>
-<pre id="state">Waiting for real incoming Safari events. Simulator only.</pre><script>
+<title>Apple mouse input receiver</title><style>html,body{margin:0;width:100%;height:100%;overflow:hidden;touch-action:none;font:16px system-ui;background:#edf5fb}canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none;outline:none}pre{position:absolute;pointer-events:none;white-space:pre-wrap;padding:20px}</style>
+<canvas id="surface" tabindex="0"></canvas><pre id="state">Waiting for real incoming Safari events. Simulator only.</pre><script>
 const device=new URLSearchParams(location.search).get('device');let queue=[],count=0;
 function flush(){if(!queue.length)return;const events=queue.splice(0);fetch('/events?device='+device,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(events)}).catch(()=>queue.unshift(...events));}
-queue.push({type:'page-ready',userAgent:navigator.userAgent,width:innerWidth,height:innerHeight,t:performance.now()});
+queue.push({type:'page-ready',surface:'canvas-with-cad-pointer-capture',userAgent:navigator.userAgent,width:innerWidth,height:innerHeight,t:performance.now()});
+// Match the existing CAD's input surface policy without sending synthetic input.
+const surface=document.querySelector('#surface');
+for(const type of ['pointerdown','pointermove','pointerup'])surface.addEventListener(type,e=>{
+ e.preventDefault();
+ if(type==='pointerdown'){surface.focus({preventScroll:true});surface.setPointerCapture(e.pointerId);}
+},{passive:false});
 // Native API transport is recorded separately. It never impersonates a trusted
 // browser PointerEvent or fabricates a button release from time or motion.
 window.nativeMouseInput=item=>{queue.push({...item,t:performance.now()});};
-for(const type of ['pointerdown','pointermove','pointerup','pointercancel','mousedown','mouseup','mousemove','wheel','contextmenu'])document.addEventListener(type,e=>{const item={type,pointerType:e.pointerType,button:e.button,buttons:e.buttons,x:e.clientX,y:e.clientY,deltaX:e.deltaX,deltaY:e.deltaY,isTrusted:e.isTrusted,t:performance.now()};queue.push(item);document.querySelector('#state').textContent='Received '+(++count)+' events\n'+JSON.stringify(item,null,2);if(type==='contextmenu'||type==='wheel')e.preventDefault();},{passive:false});
+for(const type of ['pointerdown','pointermove','pointerup','pointercancel','gotpointercapture','lostpointercapture','mousedown','mouseup','mousemove','wheel','contextmenu'])document.addEventListener(type,e=>{const item={type,pointerType:e.pointerType,button:e.button,buttons:e.buttons,x:e.clientX,y:e.clientY,deltaX:e.deltaX,deltaY:e.deltaY,isTrusted:e.isTrusted,t:performance.now()};queue.push(item);document.querySelector('#state').textContent='Received '+(++count)+' events\n'+JSON.stringify(item,null,2);if(type==='contextmenu'||type==='wheel')e.preventDefault();},{passive:false});
 setInterval(flush,200);flush();
 </script>'''
 
