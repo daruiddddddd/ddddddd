@@ -57,7 +57,10 @@ def locate_switch():
   if len(matches)==1 and ('value' in matches[0] or 'AXValue' in matches[0]):return matches[0]
   roots=t if isinstance(t,list) else [t]
   screen=next((n.get('frame') for n in roots if n.get('frame') and n['frame'].get('height',0)>300),None)
-  for target in ('AssistiveTouch','Touch','Pointer Control','Accessibility'):
+  # Pointer Control is a separate color/size/speed screen, not the route to
+  # AssistiveTouch. If Touch is offscreen, scroll Accessibility to find Touch.
+  # Apple iOS 27 guide: https://support.apple.com/en-gb/guide/iphone/iphec6e1e60b/27/ios/27
+  for target in ('AssistiveTouch','Touch','Accessibility'):
    # AXe includes headings and nested buttons. Only tap a visible actual button;
    # a section title is not a navigation control (run49).
    candidates=[n for n in find(t,target) if n.get('type')=='Button' and n.get('frame') and 'back' not in str(n.get('role_description','')).lower() and screen and 110<n['frame']['y']+n['frame']['height']/2<screen['height']-35]
@@ -127,3 +130,4 @@ finally:
   restored=sim(['spawn',udid,str((out/'accessibility-setup').resolve()),old_at],'restore-at',check=False)
   report['assistiveTouchRestored']=restored.returncode==0
  (out/'settings-ui-result.json').write_text(json.dumps(report,indent=2))
+
