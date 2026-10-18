@@ -1,5 +1,5 @@
 """Separate elapsed-time/input-service effects from app relaunch effects."""
-import json, os, shutil, subprocess, sys, time, plistlib
+import json, os, shutil, subprocess, sys, time, plistlib, re
 from pathlib import Path
 
 kind, udid=sys.argv[1:]
@@ -9,6 +9,7 @@ report={'physicalDeviceVerified':False,'publicHTMLFixed':False,'segments':[]}
 raw_mouse=os.environ.get('PROBE_RAW_MOUSE')=='1'
 no_finger=os.environ.get('PROBE_NO_FINGER')=='1'
 report['coordinateMode']='GCMouse-relative' if raw_mouse else 'UIKit'
+original_at=None
 
 def command(args,log,timeout=35,env=None):
     with (out/log).open('a') as f:
@@ -26,6 +27,15 @@ def ready(channel):
 
 def rows(path):
     return path.read_text().splitlines() if path.exists() else []
+
+def active(container):
+    # Observe a fresh public UIApplication state before any injected movement.
+    for _ in range(12):
+        states=[json.loads(s) for s in rows(container/'Documents/native-events.jsonl') if s.strip()]
+        state=next((s for s in reversed(states) if s.get('type')=='lifecycle-sample'),None)
+        if state and state.get('applicationState')==0 and time.time()-state.get('wall',0)<3:return state
+        time.sleep(1)
+    raise RuntimeError('No fresh active UIApplication sample; input not injected')
 
 def app_container():
     try:
@@ -48,6 +58,8 @@ try:
         # The simulator's mouse service received no input at all with AT off in
         # run43. Keep raw coordinates and compare AT on; never infer missing edges.
         setup=sim(['spawn',udid,str(Path('output/accessibility-setup').resolve()),'1']+(['no-finger'] if no_finger else []),kind+'-accessibility-setup.log')
+        match=re.search(r'AssistiveTouch before=(\d)',(out/(kind+'-accessibility-setup.log')).read_text())
+        if match:original_at=match.group(1)
         if setup:raise RuntimeError('Accessibility setup failed; do not interpret mouse results')
         time.sleep(20)
     if sim(['install',udid,'output/NativeProbe.app'],kind+'-native-install.log',60):
@@ -62,6 +74,7 @@ try:
             launch=sim(['launch',udid,'org.jwprobe.nativeinput','--probe-phase',channel[len(kind)+1:],'--direct-buttons']+(['--raw-mouse'] if raw_mouse else []),label+'-launch.log')
             if launch or not ready(channel): raise RuntimeError('Native page did not load: '+phase)
             dom_offset=api_offset=0
+        active_before=active(container)
         started=time.time()
         env=dict(os.environ,PROBE_DEVICE=channel)
         if index<2: env['PROBE_KEEP_SERVICES']='1'
@@ -79,12 +92,15 @@ try:
         if page and not any(json.loads(line).get('type')=='page-ready' for line in dom_slice):dom_slice.insert(0,page)
         (out/(label+'-api.jsonl')).write_text('\n'.join(api[api_offset:])+'\n')
         (out/(label+'-events.jsonl')).write_text('\n'.join(dom_slice)+'\n')
-        report['segments'].append({'phase':phase,'channel':channel,'startedWall':started,'finishedWall':time.time(),'injectorExit':code,'sameApplicationProcess':index==1,'apiLines':[api_offset,len(api)],'domLines':[dom_offset,len(dom)]})
+        report['segments'].append({'phase':phase,'channel':channel,'activeBeforeInput':active_before,'startedWall':started,'finishedWall':time.time(),'injectorExit':code,'sameApplicationProcess':index==1,'apiLines':[api_offset,len(api)],'domLines':[dom_offset,len(dom)]})
         api_offset=len(api);dom_offset=len(dom)
         print(json.dumps(report['segments'][-1]),flush=True)
         if index in (1,2):sim(['terminate',udid,'org.jwprobe.nativeinput'],label+'-launch.log')
+        if code:raise RuntimeError('Injector failed precondition or delivery; stop dependent phases')
 finally:
     sim(['terminate',udid,'org.jwprobe.nativeinput'],kind+'-final-terminate.log')
-    if kind=='iphone':sim(['spawn',udid,str(Path('output/accessibility-setup').resolve()),'0']+(['restore-finger'] if no_finger else []),kind+'-accessibility-restore.log',20)
+    if kind=='iphone' and original_at is not None:
+        report['assistiveTouchRestoreExit']=sim(['spawn',udid,str(Path('output/accessibility-setup').resolve()),original_at]+(['restore-finger'] if no_finger else []),kind+'-accessibility-restore.log',20)
     (out/(kind+'-continuous-control.json')).write_text(json.dumps(report,indent=2))
 if len(report['segments'])!=3:raise SystemExit(2)
+
