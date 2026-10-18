@@ -37,5 +37,39 @@
         ]
       ]
     }
+  ],
+  "fallbackSamples": [
+    {
+      "name": "01-atelier.jww",
+      "sha256": "90d77411ac194aca858518f00b44088f63b8f9b71a0346fc80f76600d1aca98d",
+      "bytes": 99786,
+      "entities": 1704,
+      "display": 1704,
+      "omissions": [],
+      "lha": "https://www.tmk-s.com/jww/dl/a_l.lzh"
+    },
+    {
+      "name": "02-shop.jww",
+      "sha256": "456132466e07d23fc6ccd356ea3364ed5935cffcebd109fad01b3d35e682477f",
+      "bytes": 250182,
+      "entities": 4632,
+      "display": 4632,
+      "omissions": [],
+      "lha": "https://www.tmk-s.com/jww/dl/b_l.lzh"
+    },
+    {
+      "name": "03-image.jww",
+      "sha256": "1c0a444110e7843c103f575149b7ddbdea93289d06c50cf212734050e278f4b6",
+      "bytes": 16972,
+      "url": "https://raw.githubusercontent.com/monozukuri-ai/ezjww/66af683c1e5c0b417a422352403a9ad6ced6b722/jws_samples/inputs/image.jww",
+      "entities": 3,
+      "display": 2,
+      "omissions": [
+        [
+          "貼付画像",
+          1
+        ]
+      ]
+    }
   ]
 }

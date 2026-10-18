@@ -88,9 +88,20 @@ def file_picker(sample):
  raise RuntimeError('File picker did not open '+name+' trail='+str(trail))
 
 def prepare_files(config):
- archive=urllib.request.urlopen(urllib.request.Request(config['zip'],headers={'User-Agent':'Mozilla/5.0'}),timeout=60).read();zf=zipfile.ZipFile(io.BytesIO(archive));byhash={}
+ byhash={}
+ try:
+  archivefile=OUT/'public-download.zip';cmd(['curl','--fail','--location','--max-time','40','--user-agent','Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Version/18.0 Safari/605.1.15','--referer','https://www.pref.aichi.jp/',config['zip'],'--output',str(archivefile)],'download-public');zf=zipfile.ZipFile(archivefile)
+ except Exception as e:
+  report['primaryDownloadError']=str(e);config['samples']=config['fallbackSamples'];zf=None
+  import lhafile
+  for index,s in enumerate(config['samples']):
+   if not s.get('lha'):continue
+   file=OUT/('public-'+str(index)+'.lzh');cmd(['curl','--fail','--location','--max-time','40',s['lha'],'--output',str(file)],'download-fallback');archive=lhafile.LhaFile(str(file))
+   for name in archive.namelist():
+    if name.lower().endswith('.jww'):
+     data=archive.read(name);byhash[hashlib.sha256(data).hexdigest()]=data
  wanted={s['sha256'] for s in config['samples']}
- for entry in zf.infolist():
+ for entry in zf.infolist() if zf else []:
   if entry.filename.lower().endswith('.jww'):
    data=zf.read(entry);sha=hashlib.sha256(data).hexdigest()
    if sha in wanted:byhash[sha]=data

@@ -24,6 +24,7 @@ jobs:
         run: |
           npm install --global appium@3.8.0
           appium driver install xcuitest@12.18.1
+          python3 -m pip install --break-system-packages lhafile
       - name: Touch public HTML in real Simulator Safari
         env:
           PROBE_DEVICE: ${{ matrix.device }}
