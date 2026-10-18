@@ -6,6 +6,8 @@ kind, udid=sys.argv[1:]
 out=Path('output')
 developer=subprocess.check_output(['xcode-select','-p'],text=True).strip()
 report={'physicalDeviceVerified':False,'publicHTMLFixed':False,'segments':[]}
+raw_mouse=os.environ.get('PROBE_RAW_MOUSE')=='1'
+report['coordinateMode']='GCMouse-relative' if raw_mouse else 'UIKit'
 
 def command(args,log,timeout=35,env=None):
     with (out/log).open('a') as f:
@@ -25,7 +27,7 @@ def rows(path):
     return path.read_text().splitlines() if path.exists() else []
 
 if kind=='iphone':
-    sim(['spawn',udid,str(Path('output/accessibility-setup').resolve()),'1'],kind+'-accessibility-setup.log')
+    sim(['spawn',udid,str(Path('output/accessibility-setup').resolve()),'0' if raw_mouse else '1'],kind+'-accessibility-setup.log')
     time.sleep(20)
 
 try:
@@ -37,7 +39,7 @@ try:
         label=kind+'-'+phase
         if index!=1:
             if index==2: channel=kind+'-clean-relaunch'
-            launch=sim(['launch',udid,'org.jwprobe.nativeinput','--probe-phase',channel[len(kind)+1:],'--direct-buttons'],label+'-launch.log')
+            launch=sim(['launch',udid,'org.jwprobe.nativeinput','--probe-phase',channel[len(kind)+1:],'--direct-buttons']+(['--raw-mouse'] if raw_mouse else []),label+'-launch.log')
             if launch or not ready(channel): raise RuntimeError('Native page did not load: '+phase)
             dom_offset=api_offset=0
         started=time.time()
