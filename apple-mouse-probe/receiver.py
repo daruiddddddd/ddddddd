@@ -9,12 +9,23 @@ OUT = ROOT / 'output'
 OUT.mkdir(exist_ok=True)
 LOCK = threading.Lock()
 STATE = {}
+ACKED_BATCHES = {}
 HTML = r'''<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Apple mouse input receiver</title><style>html,body{margin:0;width:100%;height:100%;overflow:hidden;touch-action:none;font:16px system-ui;background:#edf5fb}canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none;outline:none}pre{position:absolute;pointer-events:none;white-space:pre-wrap;padding:20px}</style>
 <canvas id="surface" tabindex="0"></canvas><pre id="state">Waiting for real incoming Safari events. Simulator only.</pre><script>
-const params=new URLSearchParams(location.search),device=params.get('device'),policy=params.get('policy')||'cad';let queue=[],count=0;
-function flush(){if(!queue.length)return;const events=queue.splice(0);fetch('/events?device='+device,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(events)}).catch(()=>queue.unshift(...events));}
-queue.push({type:'page-ready',surface:'canvas',policy,userAgent:navigator.userAgent,width:innerWidth,height:innerHeight,t:performance.now(),capabilities:{pointerLock:typeof document.body.requestPointerLock,pointerRawUpdate:'onpointerrawupdate' in window,coalescedEvents:typeof PointerEvent.prototype.getCoalescedEvents}});
+const params=new URLSearchParams(location.search),device=params.get('device'),policy=params.get('policy')||'cad';let queue=[],count=0,sending=false,batch=0,pending=null;
+const recorderSession=crypto.randomUUID();
+async function flush(){
+ if(sending||(!pending&&!queue.length))return;
+ sending=true;
+ if(!pending)pending={id:++batch,body:JSON.stringify(queue.splice(0))};
+ // One upload at a time preserves browser event order. Retrying the exact
+ // batch is idempotent even when its earlier response was lost.
+ try {const r=await fetch('/events?device='+device+'&session='+recorderSession+'&batch='+pending.id,{method:'POST',headers:{'Content-Type':'application/json'},body:pending.body});if(!r.ok)throw Error('recording HTTP '+r.status);pending=null;}
+ catch(error){document.querySelector('#state').textContent='Recording retry: '+error.message;}
+ finally {sending=false;}
+}
+queue.push({type:'page-ready',surface:'canvas',policy,recorderSession,recorderVersion:2,userAgent:navigator.userAgent,width:innerWidth,height:innerHeight,t:performance.now(),capabilities:{pointerLock:typeof document.body.requestPointerLock,pointerRawUpdate:'onpointerrawupdate' in window,coalescedEvents:typeof PointerEvent.prototype.getCoalescedEvents}});
 // Match the existing CAD's input surface policy without sending synthetic input.
 const surface=document.querySelector('#surface');
 for(const type of ['pointerdown','pointermove','pointerup'])surface.addEventListener(type,e=>{
@@ -55,12 +66,23 @@ class Handler(BaseHTTPRequestHandler):
         try:
             events=json.loads(self.rfile.read(size))
             if not isinstance(events,list):raise ValueError('Expected event array')
+            query=parse_qs(parsed.query)
+            session=query.get('session',[''])[0]
+            batch=int(query.get('batch',['0'])[0])
             with LOCK, (OUT/(device+'-events.jsonl')).open('a',encoding='utf-8') as f:
+                if session:
+                    key=(device,session)
+                    previous=ACKED_BATCHES.get(key,0)
+                    if batch<=previous:
+                        self.send_response(204);self.end_headers();return
+                    if batch!=previous+1:
+                        self.send_error(409,'Recording batch gap');return
                 for e in events:
                     f.write(json.dumps(e,ensure_ascii=False)+'\n')
                     state=STATE.setdefault(device,{})
                     if e.get('type')=='page-ready':state.update(width=e['width'],height=e['height'])
                     if e.get('pointerType')=='mouse' and e.get('isTrusted') and e.get('x',-1)>=0 and e.get('y',-1)>=0:state.update(x=e['x'],y=e['y'],buttons=e.get('buttons'),t=e.get('t'))
+                if session:ACKED_BATCHES[key]=batch
             self.send_response(204);self.end_headers()
         except (ValueError,TypeError):
             self.send_error(400)
