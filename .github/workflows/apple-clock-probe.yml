@@ -21,7 +21,7 @@ jobs:
       - name: Public CAD clock gestures on iPad Simulator
         env:
           PROBE_DEVICE: ipad
-          PROBE_HEADLESS: '1'
+          PROBE_HEADLESS: '0'
           PROBE_RAW_MOUSE: '0'
           PROBE_FOCUS: product-html
           CLOCK_PUBLIC_URL: https://jw1036-rebuild-lab.ryu08ma.chatgpt.site/?v=0220
