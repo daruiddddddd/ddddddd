@@ -12,9 +12,9 @@ def rows():
 report={'physicalDeviceVerified':False,'allSourceJwParityVerified':False,'scope':'iPad Simulator actual HID input into hash-matched published CAD clock subset','device':kind}
 try:
     if kind!='ipad':raise RuntimeError('This workflow is iPad only')
-    sim(['terminate',udid,'com.apple.mobilesafari'],'terminate')
+    # Keep the warmed Safari process. Killing it added a second launch race.
     if sim(['launch',udid,'com.apple.mobilesafari'],'launch'):raise RuntimeError('Safari launch failed')
-    if sim(['openurl',udid,'http://127.0.0.1:8765/product?device='+channel],'open'):raise RuntimeError('Public-code page opening failed')
+    report['openExit']=sim(['openurl',udid,'http://127.0.0.1:8765/product?device='+channel],'open')
     for _ in range(45):
         if any(e.get('type')=='page-ready' and e.get('product') for e in rows()):break
         time.sleep(1)
@@ -32,6 +32,8 @@ try:
 except Exception as e:
     report['error']=str(e);report['passed']=False
 finally:
+    if not report.get('passed'):
+        report['failureScreenshotExit']=sim(['io',udid,'screenshot',str(out/(kind+'-clock-failure.png'))],'failure-screenshot',20)
     (out/(kind+'-clock-result.json')).write_text(json.dumps(report,ensure_ascii=False,indent=2))
 print(json.dumps(report));raise SystemExit(0 if report.get('passed') else 2)
 
