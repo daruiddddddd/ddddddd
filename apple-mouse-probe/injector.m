@@ -72,16 +72,23 @@ static void center(void){
     if(calibrationFailed)return;
     NSString *kind=@(getenv("PROBE_DEVICE")?:"ipad");
     NSURL *url=[NSURL URLWithString:[@"http://127.0.0.1:8765/latest?device=" stringByAppendingString:kind]];
+    // Fresh feedback must come from the selected input route. Old DOM positions
+    // cannot calibrate a native UIKit route, or silently mask a lost release.
+    mouse(1,0,0);settle(.3);
     for(int i=0;i<24;i++){
         NSData *data=[NSURLConnection sendSynchronousRequest:[NSURLRequest requestWithURL:url cachePolicy:NSURLRequestReloadIgnoringLocalCacheData timeoutInterval:1] returningResponse:NULL error:NULL];
         NSDictionary *position=data?[NSJSONSerialization JSONObjectWithData:data options:0 error:NULL]:nil;
         double x=[position[@"x"] doubleValue],y=[position[@"y"] doubleValue];
         double width=[position[@"width"] doubleValue],height=[position[@"height"] doubleValue];
-        if(position[@"x"] && width>0 && height>0){
+        double age=NSDate.date.timeIntervalSince1970-[position[@"positionWall"] doubleValue];
+        BOOL fresh=position[@"positionWall"] && age>=0 && age<2;
+        BOOL neutral=position[@"buttons"] && [position[@"buttons"] unsignedIntegerValue]==0;
+        if(position[@"x"] && width>0 && height>0 && fresh && [position[@"positionValid"] boolValue] && neutral){
             double ex=width*.4-x,ey=height*.4-y;
-            if(fabs(ex)<8 && fabs(ey)<8){printf("Page mouse position confirmed x=%g y=%g\n",x,y);return;}
+            if(fabs(ex)<8 && fabs(ey)<8){printf("Page mouse position confirmed x=%g y=%g age=%.3f buttons=0 source=%s\n",x,y,age,[position[@"coordinateSource"] UTF8String]);return;}
             mouse(fmax(-60,fmin(60,ex*.5)),fmax(-60,fmin(60,ey*.5)),0);
-        } else mouse(60,70,0);
+        } else if(!position[@"x"])mouse(60,70,0);
+        else {printf("Waiting for fresh neutral feedback age=%.3f buttons=%u valid=%d\n",age,[position[@"buttons"] unsignedIntValue],[position[@"positionValid"] boolValue]);}
         settle(.25);
     }
     calibrationFailed=YES;printf("Page mouse position unavailable; do not interpret button tests as a platform result\n");
