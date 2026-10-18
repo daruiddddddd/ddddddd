@@ -7,7 +7,11 @@ report={'physicalDevice':False,'deviceKind':kind,'scope':'AXe native one-finger 
 def save():(OUT/'result.json').write_text(json.dumps(report,ensure_ascii=False,indent=2))
 def cmd(args,label,timeout=60,check=True):
  global serial
- serial+=1;p=subprocess.run(args,capture_output=True,text=True,timeout=timeout);(OUT/(str(serial)+'-'+label+'.log')).write_text(p.stdout+'\n'+p.stderr)
+ serial+=1
+ try:p=subprocess.run(args,capture_output=True,text=True,timeout=timeout)
+ except subprocess.TimeoutExpired as e:
+  (OUT/(str(serial)+'-'+label+'.log')).write_text('TIMEOUT '+str(timeout)+'s: '+str(args));raise
+ (OUT/(str(serial)+'-'+label+'.log')).write_text(p.stdout+'\n'+p.stderr)
  if check and p.returncode:raise RuntimeError(label+' exit '+str(p.returncode))
  return p.stdout
 
@@ -52,10 +56,12 @@ const post=o=>fetch('/events',{method:'POST',body:JSON.stringify(o)}).catch(()=>
   devices=[d for d in inventory['devices'].get(rid,[]) if d.get('isAvailable') and d['name'].startswith('iPhone' if kind=='iphone' else 'iPad')]
   if devices:device=devices[-1];report['device']={**device,'runtime':runtimes[rid]['version']};udid=device['udid'];break
  if not udid:raise RuntimeError('No installed simulator')
- save();dev=cmd(['xcode-select','-p'],'developer').strip();hub=Path(dev)/'Applications/Device Hub.app'
- if hub.exists():cmd(['open','-a',str(hub)],'hub',check=False)
+ save();dev=cmd(['xcode-select','-p'],'developer').strip();hub=Path(dev).parent/'Applications/DeviceHub.app'
+ if not hub.exists():raise RuntimeError('Xcode DeviceHub not found: '+str(hub))
+ cmd(['open','-g',str(hub)],'hub');report['deviceHubStarted']=str(hub)
+ time.sleep(5)
  cmd(['xcrun','simctl','boot',udid],'boot',check=False);cmd(['xcrun','simctl','bootstatus',udid,'-b'],'bootstatus',timeout=240)
- cmd(['xcrun','simctl','launch',udid,'com.apple.mobilesafari'],'safari-launch',timeout=40,check=False);cmd(['xcrun','simctl','openurl',udid,'http://127.0.0.1:8765/'],'safari-open',timeout=40);wait(lambda:latest.get('version')=='0.24.0-display',45)
+ cmd(['xcrun','simctl','launch',udid,'com.apple.mobilesafari'],'safari-launch',timeout=120,check=False);cmd(['xcrun','simctl','openurl',udid,'http://127.0.0.1:8765/'],'safari-open',timeout=90);wait(lambda:latest.get('version')=='0.24.0-display',45)
  offset=[0,0];cal=[latest['screen']['width']*.55,latest['screen']['height']*.55];n=len(events);tap(*cal);wait(lambda:any(e['type']=='pointerdown' and e.get('pointerType')=='touch' and e.get('isTrusted') for e in events[n:]));e=next(e for e in events[n:] if e['type']=='pointerdown');offset=[cal[0]-e['x'],cal[1]-e['y']];report['calibration']={'input':cal,'received':e,'offset':offset};
  control('line');control('left');b=state();rect=b['rect'];left=max(rect['x']+20,0);right=min(rect['x']+rect['width']-20,b['viewport']['width']-25);top=max(rect['y']+50,180);p=[left+20,top+30];q=[right-20,top+100]
  tap(*p);tap(*q);wait(lambda:latest['count']!=b['count']);a=state();check('one-finger-draw-line',b,a,a['count']==b['count']+1);shot('draw-line')
@@ -65,7 +71,9 @@ const post=o=>fetch('/events',{method:'POST',body:JSON.stringify(o)}).catch(()=>
 except Exception as e:report['passed']=False;report['error']=str(e)
 finally:
  if udid:
-  try:shot('final');cmd(['xcrun','simctl','shutdown',udid],'shutdown',timeout=30,check=False)
+  try:shot('final')
+  except Exception as e:report['finalScreenshotError']=str(e)
+  try:cmd(['xcrun','simctl','shutdown',udid],'shutdown',timeout=30,check=False)
   except Exception as e:report['cleanupError']=str(e)
  save()
 print(json.dumps({'passed':report.get('passed'),'cases':len(report['cases']),'error':report.get('error')}));raise SystemExit(0 if report.get('passed') else 2)
