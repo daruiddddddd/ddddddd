@@ -1,3 +1,30 @@
+LATEST CONTROLLED RESULTS 2026-10-18 / PUBLIC HTML NOT FIXED
+
+Run38: https://github.com/daruiddddddd/ddddddd/actions/runs/39086898863
+Both mouse and pointer simulator services are now removed during cleanup.
+iPad native initial/relaunch both received20 edges and all4 chord sequences.
+iPhone initial received20; relaunch received15. Standalone Safari CAD policy,
+compatibility-MouseEvents-enabled, and no-capture policies all failed stationary
+partial-release delivery. iPad compatibility MouseEvents also skip the remaining
+single-button state. No synthetic releases or altered user controls were added.
+
+Recorder correction: parallel HTTP uploads could arrive out of browser order.
+Raw recordings are preserved. A single-page stable performance.now reassessment
+changes run38 iPhone initial from fail to pass; relaunch remains failed.
+Receiver commit1c3ed16 serializes uploads and deduplicates exact retry batches.
+Local Node and HTTP tests pass. That recorder fix was NOT in runs38 or39.
+
+Run39: https://github.com/daruiddddddd/ddddddd/actions/runs/39087785694
+iPhone continuous control: initial20/20; same process second sequence20/20;
+then app relaunch15/20. First two pass all4 native chord sequences after recorder
+order correction; relaunch fails. Application state stays active. This narrows
+the failure to the relaunch/reconnection path in this Simulator configuration,
+not elapsed time alone. It is NOT proof of a physical-device root cause.
+The green run39 job means the three phases executed, not input compatibility.
+Simulators shut down and test accessibility settings restored in runs38 and39.
+Public CAD remains unchanged; full native distribution has not been adopted.
+
+Previous run37 record follows as history:
 FINAL BOUNDED RESULTS 2026-10-18 / PROJECT NOT COMPLETE
 
 Run37: https://github.com/daruiddddddd/ddddddd/actions/runs/39082764021
