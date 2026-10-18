@@ -76,7 +76,7 @@ try:
             dom_offset=api_offset=0
         active_before=active(container)
         started=time.time()
-        env=dict(os.environ,PROBE_DEVICE=channel)
+        env=dict(os.environ,PROBE_DEVICE=channel,PROBE_BUTTONS_ONLY='1')
         if index<2: env['PROBE_KEEP_SERVICES']='1'
         if index>0: env['PROBE_REUSE_SERVICES']='1'
         code=command(['output/injector',developer,udid],label+'-injector.log',90,env)
@@ -103,4 +103,3 @@ finally:
         report['assistiveTouchRestoreExit']=sim(['spawn',udid,str(Path('output/accessibility-setup').resolve()),original_at]+(['restore-finger'] if no_finger else []),kind+'-accessibility-restore.log',20)
     (out/(kind+'-continuous-control.json')).write_text(json.dumps(report,indent=2))
 if len(report['segments'])!=3:raise SystemExit(2)
-
