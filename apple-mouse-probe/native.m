@@ -37,7 +37,7 @@ static void observeMouse(GCMouse *mouse) {
     if(!mouse || [observedMice containsObject:mouse])return;
     [observedMice addObject:mouse]; mouse.handlerQueue=mouseQueue;
     NSUInteger mouseId=observedMice.count;
-    record(@{@"source":@"GCMouse",@"type":@"connected",@"mouseId":@(mouseId),@"category":mouse.productCategory?:@"",@"vendor":mouse.vendorName?:@""});
+    record(@{@"source":@"GCMouse",@"type":@"connected",@"mouseId":@(mouseId),@"identity":[NSString stringWithFormat:@"%p",mouse],@"category":mouse.productCategory?:@"",@"vendor":mouse.vendorName?:@""});
     GCMouseInput *input=mouse.mouseInput;
     @synchronized(buttonStates){buttonStates[[NSValue valueWithNonretainedObject:input]]=@(buttons(input));}
     input.mouseMovedHandler=^(GCMouseInput *m,float dx,float dy){ record(@{@"source":@"GCMouse",@"type":@"move",@"mouseId":@(mouseId),@"dx":@(dx),@"dy":@(dy),@"buttons":@(receivedButtons(m))}); };
@@ -125,6 +125,9 @@ static void observeMouse(GCMouse *mouse) {
     }];
     for(GCMouse *mouse in GCMouse.mice)observeMouse(mouse);
     [NSNotificationCenter.defaultCenter addObserverForName:GCMouseDidConnectNotification object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *n){ observeMouse(n.object); }];
+    [NSNotificationCenter.defaultCenter addObserverForName:GCMouseDidDisconnectNotification object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *n){
+        record(@{@"source":@"GCMouse",@"type":@"disconnected",@"identity":[NSString stringWithFormat:@"%p",n.object],@"mouseCount":@(GCMouse.mice.count)});
+    }];
     [NSNotificationCenter.defaultCenter addObserverForName:GCMouseDidBecomeCurrentNotification object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *n){ observeMouse(n.object); }];
 }
 @end
