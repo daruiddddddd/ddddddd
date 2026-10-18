@@ -15,16 +15,22 @@ static BOOL hasBridgePoint=NO;
 static NSUInteger bridgeButtons=0;
 static BOOL rawMouseMode=NO;
 static NSUInteger nextMouseId=0;
+static NSMapTable<GCMouse *,NSNumber *> *mouseIdentities;
+static NSMutableDictionary<NSNumber *,NSNumber *> *sampledMasks;
+static NSUInteger observationSequence=0;
 static void record(NSDictionary *data) {
     NSMutableDictionary *row=[data mutableCopy];
     row[@"uptime"]=@(NSProcessInfo.processInfo.systemUptime);
     row[@"wall"]=@(NSDate.date.timeIntervalSince1970);
     // Preserve the callback-entry timestamp, but do not encode or write files
     // on the input queue. A busy renderer/logger must not hold up mouse edges.
+    @synchronized(logFile){
+    row[@"observationSequence"]=@(++observationSequence);
     dispatch_async(logQueue,^{
         NSData *bytes=[NSJSONSerialization dataWithJSONObject:row options:0 error:nil];
         [logFile writeData:bytes]; [logFile writeData:[@"\n" dataUsingEncoding:NSUTF8StringEncoding]];
     });
+    }
 }
 static void bridge(NSDictionary *data) {
     if(!bridgeView || !hasBridgePoint)return;
@@ -40,12 +46,23 @@ static NSUInteger buttons(GCMouseInput *input) {
     return (input.leftButton.isPressed?1:0)|(input.rightButton.isPressed?2:0)|(input.middleButton.isPressed?4:0);
 }
 static NSUInteger receivedButtons(GCMouseInput *input){@synchronized(buttonStates){return [buttonStates[[NSValue valueWithNonretainedObject:input]] unsignedIntegerValue];}}
+static NSNumber *identityForMouse(GCMouse *mouse){
+    NSNumber *identity=[mouseIdentities objectForKey:mouse];
+    if(!identity){identity=@(++nextMouseId);[mouseIdentities setObject:identity forKey:mouse];}
+    return identity;
+}
 static void observeMouse(GCMouse *mouse) {
     if(!mouse || [observedMice containsObject:mouse])return;
     [observedMice addObject:mouse]; mouse.handlerQueue=mouseQueue;
-    NSUInteger mouseId=++nextMouseId;
+    NSUInteger mouseId=identityForMouse(mouse).unsignedIntegerValue;
     record(@{@"source":@"GCMouse",@"type":@"connected",@"mouseId":@(mouseId),@"identity":[NSString stringWithFormat:@"%p",mouse],@"category":mouse.productCategory?:@"",@"vendor":mouse.vendorName?:@""});
     GCMouseInput *input=mouse.mouseInput;
+    record(@{@"source":@"diagnostic",@"type":@"binding",@"mouseId":@(mouseId),@"inputIdentity":[NSString stringWithFormat:@"%p",input],@"profileIdentity":[NSString stringWithFormat:@"%p",mouse.physicalInputProfile],@"current":@(mouse==GCMouse.current)});
+    // Independent observations only. They never feed the CAD or bridge.
+    input.valueDidChangeHandler=^(GCPhysicalInputProfile *profile,GCControllerElement *element){
+        NSString *name=element==input.leftButton?@"left":element==input.rightButton?@"right":element==input.middleButton?@"middle":@"other";
+        record(@{@"source":@"diagnostic",@"type":@"profile-change",@"mouseId":@(mouseId),@"name":name,@"elementIdentity":[NSString stringWithFormat:@"%p",element],@"polledButtons":@(buttons(input)),@"profileTimestampRaw":@(profile.lastEventTimestamp)});
+    };
     @synchronized(buttonStates){buttonStates[[NSValue valueWithNonretainedObject:input]]=@(buttons(input));}
     input.mouseMovedHandler=^(GCMouseInput *m,float dx,float dy){
         NSUInteger snapshot=receivedButtons(m);
@@ -68,6 +85,9 @@ static void observeMouse(GCMouse *mouse) {
         if([NSProcessInfo.processInfo.arguments containsObject:@"--direct-buttons"])
             button.preferredSystemGestureState=GCSystemGestureStateDisabled;
         record(@{@"source":@"GCMouse",@"type":@"button-policy",@"mouseId":@(mouseId),@"name":name,@"boundToSystemGesture":@(button.isBoundToSystemGesture),@"preferredSystemGestureState":@(button.preferredSystemGestureState)});
+        button.valueChangedHandler=^(GCControllerButtonInput *b,float value,BOOL pressed){
+            record(@{@"source":@"diagnostic",@"type":@"button-value",@"mouseId":@(mouseId),@"name":name,@"pressed":@(pressed),@"value":@(value),@"polledButtons":@(buttons(input)),@"profileTimestampRaw":@(input.lastEventTimestamp)});
+        };
         button.pressedChangedHandler=^(GCControllerButtonInput *b,float value,BOOL pressed){
             // Use the delivered edge, not a later poll of the device. UIKit can
             // queue callbacks while rendering, so isPressed may already differ.
@@ -144,6 +164,19 @@ static void observeMouse(GCMouse *mouse) {
         record(@{@"source":@"app",@"type":@"lifecycle-sample",@"assistiveTouch":@(UIAccessibilityIsAssistiveTouchRunning()),@"mouseCount":@(GCMouse.mice.count),@"applicationState":@(UIApplication.sharedApplication.applicationState)});
     }];
     for(GCMouse *mouse in GCMouse.mice)observeMouse(mouse);
+    // 50 Hz samples are diagnostic observations, never missing-edge repairs.
+    [NSTimer scheduledTimerWithTimeInterval:.02 repeats:YES block:^(NSTimer *timer){
+        for(GCMouse *mouse in GCMouse.mice){
+            NSNumber *identity=identityForMouse(mouse);GCMouseInput *input=mouse.mouseInput;
+            dispatch_async(mouseQueue,^{
+                NSNumber *mask=@(buttons(input));
+                if(![sampledMasks[identity] isEqual:mask]){
+                    sampledMasks[identity]=mask;
+                    record(@{@"source":@"diagnostic",@"type":@"sample-change",@"mouseId":identity,@"polledButtons":mask,@"profileTimestampRaw":@(input.lastEventTimestamp),@"notAnInputEvent":@YES});
+                }
+            });
+        }
+    }];
     [NSNotificationCenter.defaultCenter addObserverForName:GCMouseDidConnectNotification object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *n){ observeMouse(n.object); }];
     [NSNotificationCenter.defaultCenter addObserverForName:GCMouseDidDisconnectNotification object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *n){
         record(@{@"source":@"GCMouse",@"type":@"disconnected",@"identity":[NSString stringWithFormat:@"%p",n.object],@"mouseCount":@(GCMouse.mice.count)});
@@ -156,11 +189,16 @@ static void observeMouse(GCMouse *mouse) {
         input.leftButton.pressedChangedHandler=nil;
         input.rightButton.pressedChangedHandler=nil;
         input.middleButton.pressedChangedHandler=nil;
+        input.leftButton.valueChangedHandler=nil;
+        input.rightButton.valueChangedHandler=nil;
+        input.middleButton.valueChangedHandler=nil;
+        input.valueDidChangeHandler=nil;
         input.scroll.valueChangedHandler=nil;
         [observedMice removeObject:mouse];
         @synchronized(buttonStates){[buttonStates removeObjectForKey:[NSValue valueWithNonretainedObject:input]];}
     }];
     [NSNotificationCenter.defaultCenter addObserverForName:GCMouseDidBecomeCurrentNotification object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *n){ observeMouse(n.object); }];
+    [NSNotificationCenter.defaultCenter addObserverForName:GCMouseDidStopBeingCurrentNotification object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *n){record(@{@"source":@"diagnostic",@"type":@"not-current",@"mouseId":identityForMouse(n.object)});}];
 }
 @end
 @interface ProbeScene : UIResponder <UIWindowSceneDelegate>
@@ -180,6 +218,7 @@ static void observeMouse(GCMouse *mouse) {
     NSString *path=[NSSearchPathForDirectoriesInDomains(NSDocumentDirectory,NSUserDomainMask,YES).firstObject stringByAppendingPathComponent:@"native-events.jsonl"];
     [NSFileManager.defaultManager createFileAtPath:path contents:nil attributes:nil];
     logFile=[NSFileHandle fileHandleForWritingAtPath:path]; observedMice=[NSMutableSet set]; buttonStates=[NSMutableDictionary dictionary];
+    mouseIdentities=[NSMapTable strongToStrongObjectsMapTable];sampledMasks=[NSMutableDictionary dictionary];
     logQueue=dispatch_queue_create("org.jwprobe.mouse-log",DISPATCH_QUEUE_SERIAL);
     mouseQueue=dispatch_queue_create("org.jwprobe.mouse-input",DISPATCH_QUEUE_SERIAL);
     // SDL's UIKit backend uses the same dedicated serial HIGH-priority target.
