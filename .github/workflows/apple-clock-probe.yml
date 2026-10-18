@@ -21,7 +21,8 @@ jobs:
       - name: Public CAD clock gestures on iPad Simulator
         env:
           PROBE_DEVICE: ipad
-          PROBE_HEADLESS: '0'
+          PROBE_HEADLESS: '1'
+          PROBE_MOUSE_ONLY: '1'
           PROBE_RAW_MOUSE: '0'
           PROBE_FOCUS: product-html
           CLOCK_PUBLIC_URL: https://jw1036-rebuild-lab.ryu08ma.chatgpt.site/?v=0220
@@ -36,4 +37,3 @@ jobs:
           path: apple-mouse-probe/output/
           retention-days: 7
           if-no-files-found: error
-
