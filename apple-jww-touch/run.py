@@ -31,7 +31,8 @@ def req(method,path='',body=None,timeout=120):
  return value
 
 def call(method,path,body=None):return req(method,'/session/'+sid+path,body)
-def native(points,dx=0,dy=0,release_order=0):
+def native(points,dx=0,dy=0,release_order=0,observe=True):
+ ups=sum(e['type']=='pointerup' for e in events)
  sources=[]
  for i,(x,y) in enumerate(points):
   sx,sy=round(x*scale+offset[0]),round(y*scale+offset[1]);actions=[{'type':'pointerMove','duration':0,'x':sx,'y':sy,'origin':'viewport'},{'type':'pointerDown','button':0},{'type':'pause','duration':150}]
@@ -41,9 +42,13 @@ def native(points,dx=0,dy=0,release_order=0):
    actions += [{'type':'pointerUp','button':0} if i==release_order else {'type':'pause','duration':0},{'type':'pause','duration':250},{'type':'pointerUp','button':0} if i!=release_order else {'type':'pause','duration':0}]
   else:actions.append({'type':'pointerUp','button':0})
   sources.append({'type':'pointer','id':'finger'+str(i),'parameters':{'pointerType':'touch'},'actions':actions})
- call('POST','/actions',{'actions':sources});time.sleep(.45)
-def tap(x,y):native([[x,y]])
-def control(name):r=latest['controls'][name];tap(r['x']+r['width']/2,r['y']+r['height']/2)
+ call('POST','/actions',{'actions':sources})
+ if observe:
+  wait(lambda:sum(e['type']=='pointerup' for e in events)>=ups+len(points),20)
+  end=max(e['t'] for e in events if e['type']=='pointerup');wait(lambda:latest.get('t',0)>end,20)
+ else:time.sleep(.45)
+def tap(x,y,observe=True):native([[x,y]],observe=observe)
+def control(name):r=latest['controls'][name];tap(r['x']+r['width']/2,r['y']+r['height']/2,observe=False)
 def shot(name):
  if sid:(OUT/(name+'.png')).write_bytes(base64.b64decode(call('GET','/screenshot')))
  else:cmd(['xcrun','simctl','io',udid,'screenshot',str(OUT/(name+'.png'))],name,timeout=20,check=False)
@@ -55,12 +60,13 @@ class Handler(BaseHTTPRequestHandler):
   self.send_response(200);self.send_header('Content-Type','text/html; charset=utf-8');self.end_headers();self.wfile.write(html)
  def do_POST(self):
   global latest
-  data=json.loads(self.rfile.read(int(self.headers.get('Content-Length',0))))
-  if data['type']=='state':
-   if data.get('t',0)>latest.get('t',-1):latest=data
-  elif data['type']=='error':errors.append(data)
-  else:events.append(data)
-  with (OUT/'events.jsonl').open('a') as f:f.write(json.dumps(data)+'\n')
+  batch=json.loads(self.rfile.read(int(self.headers.get('Content-Length',0))))
+  for data in batch if isinstance(batch,list) else [batch]:
+   if data['type']=='state':
+    if data.get('t',0)>latest.get('t',-1):latest=data
+   elif data['type']=='error':errors.append(data)
+   else:events.append(data)
+   with (OUT/'events.jsonl').open('a') as f:f.write(json.dumps(data)+'\n')
   self.send_response(200);self.end_headers()
 
 def click_label(labels,contains=False):

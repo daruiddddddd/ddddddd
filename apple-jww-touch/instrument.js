@@ -1,5 +1,5 @@
 <script>(()=>{
-let queue=Promise.resolve();const post=o=>{queue=queue.then(()=>fetch('/events',{method:'POST',body:JSON.stringify(o)})).catch(()=>{});};
+let pending=[],busy=false;const post=o=>pending.push(o);setInterval(()=>{if(busy||!pending.length)return;busy=true;const batch=pending.splice(0);fetch('/events',{method:'POST',body:JSON.stringify(batch)}).catch(()=>{}).finally(()=>{busy=false;});},100);
 for(const type of ['pointerdown','pointermove','pointerup','pointercancel'])document.addEventListener(type,e=>post({type,pointerType:e.pointerType,isTrusted:e.isTrusted,x:e.clientX,y:e.clientY,id:e.pointerId,target:e.target.id,t:performance.now()}),{capture:true,passive:true});
 addEventListener('error',e=>post({type:'error',message:e.message}));addEventListener('unhandledrejection',e=>post({type:'error',message:String(e.reason)}));
 document.getElementById('file').addEventListener('change',e=>post({type:'file-change',isTrusted:e.isTrusted,name:e.target.files[0]?.name,bytes:e.target.files[0]?.size,t:performance.now()}),true);
