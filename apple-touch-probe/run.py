@@ -2,7 +2,7 @@
 import base64,hashlib,json,os,re,subprocess,time,traceback,urllib.request,urllib.error
 from pathlib import Path
 ROOT=Path(__file__).resolve().parent;OUT=ROOT/'output';OUT.mkdir(exist_ok=True)
-kind=os.environ['PROBE_DEVICE'];url='https://jw1036-rebuild-lab.ryu08ma.chatgpt.site/?v=0240'
+kind=os.environ['PROBE_DEVICE'];url='https://jw1036-rebuild-lab.ryu08ma.chatgpt.site/?v=0241'
 report={'deviceKind':kind,'publicURL':url,'physicalDevice':False,'scope':'Apple Simulator Safari, public URL, native XCTest touch actions; fixture loading via JS only; not file-picker verification','cases':[]};sid=None;appium=None;udid=None;webctx=None;offset=[0,0];scale=1
 
 def save(): (OUT/'result.json').write_text(json.dumps(report,ensure_ascii=False,indent=2))
@@ -71,12 +71,12 @@ try:
   command(['ps','-axo','pid,ppid,etime,%cpu,command'],'server-processes',check=False)
   raise RuntimeError('Appium server startup failed before simulator; see appium.log and server-processes.log')
  command(['xcrun','simctl','boot',udid],'boot',check=False);command(['xcrun','simctl','bootstatus',udid,'-b'],'bootstatus',timeout=300)
- caps={'platformName':'iOS','browserName':'Safari','appium:automationName':'XCUITest','appium:udid':udid,'appium:deviceName':device['name'],'appium:platformVersion':runtime['version'],'appium:newCommandTimeout':180,'appium:wdaLaunchTimeout':180000,'appium:safariInitialUrl':url,'appium:showXcodeLog':True}
- session=req('POST','/session',{'capabilities':{'alwaysMatch':caps,'firstMatch':[{}]}},timeout=660);sid=session['sessionId'];report['capabilities']=session.get('capabilities');save()
+ caps={'platformName':'iOS','browserName':'Safari','appium:automationName':'XCUITest','appium:udid':udid,'appium:deviceName':device['name'],'appium:platformVersion':runtime['version'],'appium:newCommandTimeout':180,'appium:wdaLaunchTimeout':180000,'appium:safariInitialUrl':url,'appium:showXcodeLog':True,'appium:webviewConnectTimeout':120000}
+ session=req('POST','/session',{'capabilities':{'alwaysMatch':caps,'firstMatch':[{}]}},timeout=780);sid=session['sessionId'];report['capabilities']=session.get('capabilities');save()
  contexts=call('GET','/contexts');webctx=next(c for c in contexts if c.startswith('WEBVIEW'));context(webctx);call('POST','/url',{'url':url})
  for _ in range(40):
   try:
-   if js('return window.jwTest?.version')=='0.24.0-display':break
+   if js('return window.jwTest?.version')=='0.24.1-touch':break
   except Exception:pass
   time.sleep(1)
  else:raise RuntimeError('Public application unavailable or version mismatch')
@@ -95,7 +95,7 @@ try:
   load();b=state();points=[[left+20,top+20],[left+45,top+45]];native(points,dx=min(100,right-left-70),dy=100,release_order=order);a=state();result('two-finger-range-zoom-release-'+str(order),b,a,a['view']['ppu']>b['view']['ppu'] and a['count']==b['count']);screenshot('two-finger-zoom-'+str(order))
  load();b=state();native([[left+25,top+25],[left+50,top+50]]);a=state();result('two-finger-stationary-recenter',b,a,a['view']!=b['view'] and a['count']==b['count'] and a['view']['ppu']==b['view']['ppu'])
  load();b=state();native([[left+30,top+120]],dx=0,dy=-75);a=state();result('one-finger-clock-drag',b,a,a['command']==5 and a['count']==b['count']);screenshot('clock-after')
- report['errors']=js('return window.probeErrors');report['passed']=len(report['cases'])==6 and all(c['passed'] for c in report['cases']) and not report['errors']
+ report['rangeReleaseOrdersMatch']=report['cases'][2]['after']['view']==report['cases'][3]['after']['view'];report['errors']=js('return window.probeErrors');report['passed']=report['rangeReleaseOrdersMatch'] and len(report['cases'])==6 and all(c['passed'] for c in report['cases']) and not report['errors']
 except Exception as e:
  report['error']=str(e);report['traceback']=traceback.format_exc();report['passed']=False
  if sid:
@@ -111,3 +111,4 @@ finally:
   try:command(['xcrun','simctl','shutdown',udid],'shutdown',timeout=30,check=False)
   except Exception:pass
 print(json.dumps({'passed':report.get('passed'),'cases':len(report['cases']),'error':report.get('error')}));raise SystemExit(0 if report.get('passed') else 2)
+
