@@ -56,11 +56,18 @@ try:
  udid=device['udid'];report['device']={**device,'runtime':runtime['version']};save()
  dev=command(['xcode-select','-p'],'developer').strip();hub=Path(dev)/'Applications/Device Hub.app'
  if hub.exists():command(['open','-a',str(hub)],'device-hub',check=False)
- command(['xcrun','simctl','boot',udid],'boot',check=False);command(['xcrun','simctl','bootstatus',udid,'-b'],'bootstatus',timeout=300)
- appium_log=(OUT/'appium.log').open('w');appium=subprocess.Popen(['appium','--address','127.0.0.1','--port','4723','--log-timestamp'],stdout=appium_log,stderr=subprocess.STDOUT)
- for _ in range(40):
-  try:req('GET','/status',timeout=3);break
+ command(['appium','--version'],'appium-version',timeout=60)
+ command(['appium','driver','list','--installed'],'appium-drivers',timeout=60)
+ appium_log=(OUT/'appium.log').open('w');appium=subprocess.Popen(['appium','server','--address','127.0.0.1','--port','4723','--log-timestamp','--log-level','debug'],stdout=appium_log,stderr=subprocess.STDOUT)
+ ready=False
+ for _ in range(180):
+  if appium.poll() is not None:raise RuntimeError('Appium server exited '+str(appium.returncode))
+  try:req('GET','/status',timeout=2);ready=True;break
   except Exception:time.sleep(1)
+ if not ready:
+  command(['ps','-axo','pid,ppid,etime,%cpu,command'],'server-processes',check=False)
+  raise RuntimeError('Appium server startup failed before simulator; see appium.log and server-processes.log')
+ command(['xcrun','simctl','boot',udid],'boot',check=False);command(['xcrun','simctl','bootstatus',udid,'-b'],'bootstatus',timeout=300)
  caps={'platformName':'iOS','browserName':'Safari','appium:automationName':'XCUITest','appium:udid':udid,'appium:deviceName':device['name'],'appium:platformVersion':runtime['version'],'appium:newCommandTimeout':180,'appium:wdaLaunchTimeout':180000,'appium:safariInitialUrl':url,'appium:showXcodeLog':True}
  session=req('POST','/session',{'capabilities':{'alwaysMatch':caps,'firstMatch':[{}]}},timeout=360);sid=session['sessionId'];report['capabilities']=session.get('capabilities');save()
  contexts=call('GET','/contexts');webctx=next(c for c in contexts if c.startswith('WEBVIEW'));context(webctx);call('POST','/url',{'url':url})
@@ -84,7 +91,7 @@ try:
  for order in [0,1]:
   load();b=state();points=[[left+20,top+20],[left+45,top+45]];native(points,dx=min(100,right-left-70),dy=100,release_order=order);a=state();result('two-finger-range-zoom-release-'+str(order),b,a,a['view']['ppu']>b['view']['ppu'] and a['count']==b['count']);screenshot('two-finger-zoom-'+str(order))
  load();b=state();native([[left+25,top+25],[left+50,top+50]]);a=state();result('two-finger-stationary-recenter',b,a,a['view']!=b['view'] and a['count']==b['count'] and a['view']['ppu']==b['view']['ppu'])
- load();b=state();native([[left+30,top+100]],dx=75,dy=0);a=state();result('one-finger-clock-drag',b,a,a['command']!=b['command'] and a['count']==b['count']);screenshot('clock-after')
+ load();b=state();native([[left+30,top+120]],dx=0,dy=-75);a=state();result('one-finger-clock-drag',b,a,a['command']==5 and a['count']==b['count']);screenshot('clock-after')
  report['errors']=js('return window.probeErrors');report['passed']=len(report['cases'])==6 and all(c['passed'] for c in report['cases']) and not report['errors']
 except Exception as e:
  report['error']=str(e);report['traceback']=traceback.format_exc();report['passed']=False
@@ -101,3 +108,4 @@ finally:
   try:command(['xcrun','simctl','shutdown',udid],'shutdown',timeout=30,check=False)
   except Exception:pass
 print(json.dumps({'passed':report.get('passed'),'cases':len(report['cases']),'error':report.get('error')}));raise SystemExit(0 if report.get('passed') else 2)
+
