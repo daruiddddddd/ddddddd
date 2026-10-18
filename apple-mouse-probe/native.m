@@ -7,6 +7,7 @@
 static NSFileHandle *logFile;
 static NSMutableSet<GCMouse *> *observedMice;
 static NSMutableDictionary<NSValue *,NSNumber *> *buttonStates;
+static dispatch_queue_t mouseQueue;
 static WKWebView *bridgeView;
 static CGPoint bridgePoint;
 static BOOL hasBridgePoint=NO;
@@ -31,14 +32,14 @@ static void bridge(NSDictionary *data) {
 static NSUInteger buttons(GCMouseInput *input) {
     return (input.leftButton.isPressed?1:0)|(input.rightButton.isPressed?2:0)|(input.middleButton.isPressed?4:0);
 }
-static NSUInteger receivedButtons(GCMouseInput *input){return [buttonStates[[NSValue valueWithNonretainedObject:input]] unsignedIntegerValue];}
+static NSUInteger receivedButtons(GCMouseInput *input){@synchronized(buttonStates){return [buttonStates[[NSValue valueWithNonretainedObject:input]] unsignedIntegerValue];}}
 static void observeMouse(GCMouse *mouse) {
     if(!mouse || [observedMice containsObject:mouse])return;
-    [observedMice addObject:mouse]; mouse.handlerQueue=dispatch_get_main_queue();
+    [observedMice addObject:mouse]; mouse.handlerQueue=mouseQueue;
     NSUInteger mouseId=observedMice.count;
     record(@{@"source":@"GCMouse",@"type":@"connected",@"mouseId":@(mouseId),@"category":mouse.productCategory?:@"",@"vendor":mouse.vendorName?:@""});
     GCMouseInput *input=mouse.mouseInput;
-    buttonStates[[NSValue valueWithNonretainedObject:input]]=@(buttons(input));
+    @synchronized(buttonStates){buttonStates[[NSValue valueWithNonretainedObject:input]]=@(buttons(input));}
     input.mouseMovedHandler=^(GCMouseInput *m,float dx,float dy){ record(@{@"source":@"GCMouse",@"type":@"move",@"mouseId":@(mouseId),@"dx":@(dx),@"dy":@(dy),@"buttons":@(receivedButtons(m))}); };
     for(NSDictionary *entry in @[@{@"name":@"left",@"button":input.leftButton?:NSNull.null},@{@"name":@"right",@"button":input.rightButton?:NSNull.null},@{@"name":@"middle",@"button":input.middleButton?:NSNull.null}]) {
         if(entry[@"button"]==NSNull.null)continue;
@@ -52,13 +53,18 @@ static void observeMouse(GCMouse *mouse) {
             // queue callbacks while rendering, so isPressed may already differ.
             NSUInteger bit=[name isEqualToString:@"left"]?1:[name isEqualToString:@"right"]?2:4;
             NSUInteger previous=receivedButtons(input);
-            bridgeButtons=pressed?(previous|bit):(previous&~bit);
-            buttonStates[[NSValue valueWithNonretainedObject:input]]=@(bridgeButtons);
-            record(@{@"source":@"GCMouse",@"type":@"button",@"mouseId":@(mouseId),@"name":name,@"pressed":@(pressed),@"value":@(value),@"buttons":@(bridgeButtons),@"polledButtons":@(buttons(input))});
-            bridge(@{@"type":@"native-button",@"api":@"GCMouse",@"mouseId":@(mouseId),@"name":name,@"pressed":@(pressed)});
+            NSUInteger next=pressed?(previous|bit):(previous&~bit);
+            @synchronized(buttonStates){buttonStates[[NSValue valueWithNonretainedObject:input]]=@(next);}
+            record(@{@"source":@"GCMouse",@"type":@"button",@"mouseId":@(mouseId),@"name":name,@"pressed":@(pressed),@"value":@(value),@"buttons":@(next),@"polledButtons":@(buttons(input)),@"handlerQueue":@"dedicated-serial"});
+            // Snapshot each actual edge off the UI queue. Only UIKit/WebKit
+            // access is dispatched to main; never re-poll to reconstruct edges.
+            dispatch_async(dispatch_get_main_queue(),^{
+                bridgeButtons=next;
+                bridge(@{@"type":@"native-button",@"api":@"GCMouse",@"mouseId":@(mouseId),@"name":name,@"pressed":@(pressed)});
+            });
         };
     }
-    input.scroll.valueChangedHandler=^(GCControllerDirectionPad *pad,float x,float y){ record(@{@"source":@"GCMouse",@"type":@"scroll",@"x":@(x),@"y":@(y),@"buttons":@(buttons(input))}); bridge(@{@"type":@"native-scroll",@"api":@"GCMouse",@"deltaX":@(x),@"deltaY":@(y)}); };
+    input.scroll.valueChangedHandler=^(GCControllerDirectionPad *pad,float x,float y){ record(@{@"source":@"GCMouse",@"type":@"scroll",@"x":@(x),@"y":@(y),@"buttons":@(receivedButtons(input))}); dispatch_async(dispatch_get_main_queue(),^{bridge(@{@"type":@"native-scroll",@"api":@"GCMouse",@"deltaX":@(x),@"deltaY":@(y)});}); };
 }
 @interface ProbeApplication : UIApplication @end
 @implementation ProbeApplication
@@ -131,6 +137,7 @@ static void observeMouse(GCMouse *mouse) {
     NSString *path=[NSSearchPathForDirectoriesInDomains(NSDocumentDirectory,NSUserDomainMask,YES).firstObject stringByAppendingPathComponent:@"native-events.jsonl"];
     [NSFileManager.defaultManager createFileAtPath:path contents:nil attributes:nil];
     logFile=[NSFileHandle fileHandleForWritingAtPath:path]; observedMice=[NSMutableSet set]; buttonStates=[NSMutableDictionary dictionary];
+    mouseQueue=dispatch_queue_create("org.jwprobe.mouse-input",DISPATCH_QUEUE_SERIAL);
     return YES;
 }
 @end
