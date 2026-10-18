@@ -34,7 +34,9 @@ cat output/plan.json
 kit="$(xcode-select -p)/Library/PrivateFrameworks/SimulatorKit.framework/SimulatorKit"
 if [[ ! -f "$kit" ]]; then kit="$(xcode-select -p)/../SharedFrameworks/SimulatorKit.framework/SimulatorKit"; fi
 strings "$kit" | grep 'IndigoHIDMessage \*' >output/simulator-kit-prototypes.txt || true
-python3 receiver.py >output/receiver.log 2>&1 &
+receiver=receiver.py
+if [[ "${PROBE_FOCUS:-}" == "product-html" ]]; then receiver=product-receiver.py;fi
+python3 "$receiver" >output/receiver.log 2>&1 &
 receiver_pid=$!
 current_device=''
 cleanup(){ kill "$receiver_pid" 2>/dev/null || true; if [[ -n "$current_device" ]]; then python3 bounded.py 20 xcrun simctl shutdown "$current_device" >/dev/null 2>&1 || true; fi; }
@@ -68,6 +70,13 @@ with (Path('output')/(kind+'-open.log')).open('w') as log:
             time.sleep(1)
     print('Safari ready:',p.exists() and 'page-ready' in p.read_text(),flush=True)
 PY
+  if [[ "${PROBE_FOCUS:-}" == "product-html" ]]; then
+    python3 product-run.py "$kind" "$udid" >"output/$kind-product-run.log" 2>&1 || phase_status=$?
+    printf '%s\n' "${phase_status:-0}" >"output/$kind-product-exit.txt"
+    python3 bounded.py 20 xcrun simctl shutdown "$udid" >>"output/$kind-boot.log" 2>&1 || true
+    current_device=''
+    continue
+  fi
   if [[ "${PROBE_FOCUS:-}" == "continuous-control" ]]; then
     python3 continuous-control.py "$kind" "$udid" >"output/$kind-continuous-control.log" 2>&1 || phase_status=$?
     printf '%s\n' "${phase_status:-0}" >"output/$kind-continuous-control-exit.txt"
@@ -207,7 +216,9 @@ PY
   current_device=''
 done < output/plan.tsv
 printf 'All planned phases completed\n' > output/phases-completed.txt
-if [[ "${PROBE_FOCUS:-}" == "continuous-control" ]]; then
+if [[ "${PROBE_FOCUS:-}" == "product-html" ]]; then
+  exit "$(cat "output/${PROBE_DEVICE}-product-exit.txt")"
+elif [[ "${PROBE_FOCUS:-}" == "continuous-control" ]]; then
   # This status confirms execution only. The recorded input is assessed locally.
   exit "$(cat "output/${PROBE_DEVICE}-continuous-control-exit.txt")"
 elif [[ "${PROBE_FOCUS:-}" == "html-lifecycle" ]]; then
