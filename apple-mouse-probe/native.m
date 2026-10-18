@@ -116,6 +116,13 @@ static void observeMouse(GCMouse *mouse) {
     if(arg!=NSNotFound && arg+1<args.count)phase=args[arg+1];
     [web loadRequest:[NSURLRequest requestWithURL:[NSURL URLWithString:[NSString stringWithFormat:@"http://127.0.0.1:8765/?device=%@-%@",kind,phase]]]];
     record(@{@"source":@"app",@"type":@"ready",@"device":kind,@"systemVersion":UIDevice.currentDevice.systemVersion,@"mouseCount":@(GCMouse.mice.count),@"assistiveTouch":@(UIAccessibilityIsAssistiveTouchRunning())});
+    // Read-only lifecycle diagnostics. These records never generate input.
+    [NSNotificationCenter.defaultCenter addObserverForName:UIAccessibilityAssistiveTouchStatusDidChangeNotification object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *n){
+        record(@{@"source":@"app",@"type":@"assistive-touch-change",@"running":@(UIAccessibilityIsAssistiveTouchRunning())});
+    }];
+    [NSTimer scheduledTimerWithTimeInterval:2 repeats:YES block:^(NSTimer *timer){
+        record(@{@"source":@"app",@"type":@"lifecycle-sample",@"assistiveTouch":@(UIAccessibilityIsAssistiveTouchRunning()),@"mouseCount":@(GCMouse.mice.count),@"applicationState":@(UIApplication.sharedApplication.applicationState)});
+    }];
     for(GCMouse *mouse in GCMouse.mice)observeMouse(mouse);
     [NSNotificationCenter.defaultCenter addObserverForName:GCMouseDidConnectNotification object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *n){ observeMouse(n.object); }];
     [NSNotificationCenter.defaultCenter addObserverForName:GCMouseDidBecomeCurrentNotification object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *n){ observeMouse(n.object); }];
