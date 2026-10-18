@@ -45,7 +45,8 @@ while IFS=$'\t' read -r kind udid; do
   python3 bounded.py 30 xcrun simctl boot "$udid" >"output/$kind-boot.log" 2>&1 || true
   python3 bounded.py 180 xcrun simctl bootstatus "$udid" -b >>"output/$kind-boot.log" 2>&1 || true
   cat "output/$kind-boot.log"
-  if [[ -d "$(xcode-select -p)/Applications/Simulator.app" ]]; then
+  printf 'PROBE_HEADLESS=%s\n' "${PROBE_HEADLESS:-0}" >>"output/$kind-boot.log"
+  if [[ "${PROBE_HEADLESS:-0}" != "1" && -d "$(xcode-select -p)/Applications/Simulator.app" ]]; then
     python3 bounded.py 20 open -a "$(xcode-select -p)/Applications/Simulator.app" --args -CurrentDeviceUDID "$udid" >>"output/$kind-boot.log" 2>&1 || true
   fi
   python3 bounded.py 20 xcrun simctl io "$udid" screenshot "output/$kind-before.png" >>"output/$kind-boot.log" 2>&1 || true
