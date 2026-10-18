@@ -22,7 +22,10 @@ def req(method,path='',body=None,timeout=240):
 
 def call(method,path,body=None):return req(method,'/session/'+sid+path,body)
 def context(name):call('POST','/context',{'name':name})
-def js(code,args=[]):context(webctx);return call('POST','/execute/sync',{'script':code,'args':args})
+def js(code,args=[]):
+ context(webctx)
+ encoded=call('POST','/execute/sync',{'script':'return JSON.stringify((function(){'+code+'}).apply(null,arguments));','args':args})
+ return json.loads(encoded) if encoded is not None else None
 def state():return js("return {version:jwTest.version,count:jwTest.drawing?.doc.entities.length,view:jwTest.view,command:jwTest.command,lines:jwTest.drawing?.lines.map(e=>e.coordinates),message:document.getElementById('message').textContent,clock:document.getElementById('clock').innerText,rect:document.getElementById('canvas').getBoundingClientRect().toJSON(),viewport:{width:visualViewport.width,height:visualViewport.height,scale:visualViewport.scale},events:window.touchEvidence||[]};")
 def screenshot(name):
  context('NATIVE_APP');(OUT/(name+'.png')).write_bytes(base64.b64decode(call('GET','/screenshot')))
@@ -69,7 +72,7 @@ try:
   raise RuntimeError('Appium server startup failed before simulator; see appium.log and server-processes.log')
  command(['xcrun','simctl','boot',udid],'boot',check=False);command(['xcrun','simctl','bootstatus',udid,'-b'],'bootstatus',timeout=300)
  caps={'platformName':'iOS','browserName':'Safari','appium:automationName':'XCUITest','appium:udid':udid,'appium:deviceName':device['name'],'appium:platformVersion':runtime['version'],'appium:newCommandTimeout':180,'appium:wdaLaunchTimeout':180000,'appium:safariInitialUrl':url,'appium:showXcodeLog':True}
- session=req('POST','/session',{'capabilities':{'alwaysMatch':caps,'firstMatch':[{}]}},timeout=360);sid=session['sessionId'];report['capabilities']=session.get('capabilities');save()
+ session=req('POST','/session',{'capabilities':{'alwaysMatch':caps,'firstMatch':[{}]}},timeout=660);sid=session['sessionId'];report['capabilities']=session.get('capabilities');save()
  contexts=call('GET','/contexts');webctx=next(c for c in contexts if c.startswith('WEBVIEW'));context(webctx);call('POST','/url',{'url':url})
  for _ in range(40):
   try:
