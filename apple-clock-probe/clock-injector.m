@@ -94,9 +94,17 @@ static CGPoint anchor(void){
 }
 static int caseFailures=0;
 static void outcome(NSString *name,NSDictionary *before,NSDictionary *held,int expected,NSString *property,BOOL cancel,BOOL view){
-    settle(.6);NSDictionary *after=readPage(@"/clock-state");
+    // Cloud delivery/recording may exceed a fixed 600 ms. Wait for an observed
+    // final release and a later product state, without injecting extra motion.
+    BOOL released=NO;NSDictionary *after=@{};
+    for(int i=0;i<40;i++){
+        settle(.2);NSDictionary *p=readPage(@"/latest?device=ipad-html-cad");
+        after=readPage(@"/clock-state");
+        released=p[@"buttons"]&&[p[@"buttons"] intValue]==0&&[p[@"t"] doubleValue]>[held[@"t"] doubleValue]&&[after[@"t"] doubleValue]>=[p[@"t"] doubleValue];
+        if(released)break;
+    }
     BOOL sameEntities=[after[@"entityCount"] isEqual:before[@"entityCount"]];
-    BOOL pass=!calibrationFailed&&after[@"command"]&&[after[@"command"] intValue]==expected&&sameEntities&&[after[@"visibility"] isEqual:@"visible"];
+    BOOL pass=released&&!calibrationFailed&&after[@"command"]&&[after[@"command"] intValue]==expected&&sameEntities&&[after[@"visibility"] isEqual:@"visible"];
     NSString *expectedLabel=[name containsString:@"text"]?@"文字":[name containsString:@"AM1"]?@"線・矩形":[name containsString:@"ortho"]?@"水平・垂直":[name containsString:@"dimension"]?@"寸法":cancel?@"キャンセル":nil;
     BOOL preview=expectedLabel?[held[@"clock"][@"label"] isEqual:expectedLabel]&&![held[@"clock"][@"display"] isEqual:@"none"]:[held[@"clock"][@"display"] isEqual:@"none"];
     pass=pass&&preview;
@@ -245,4 +253,3 @@ int main(int argc,const char **argv){@autoreleasepool{
     printf("sent=%d rejected=%d callbacks=%d callbackErrors=%d; inspect Safari receiver logs before drawing any conclusion\n",sent,rejected,callbacks,callbackErrors);
     return calibrationFailed?12:rejected?9:caseFailures?13:0;
 }}
-
