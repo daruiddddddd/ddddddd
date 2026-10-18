@@ -80,11 +80,16 @@ class Handler(BaseHTTPRequestHandler):
                 for e in events:
                     f.write(json.dumps(e,ensure_ascii=False)+'\n')
                     state=STATE.setdefault(device,{})
-                    if e.get('type')=='page-ready':state.update(width=e['width'],height=e['height'])
+                    if e.get('type')=='page-ready':state.update(width=e['width'],height=e['height'],pageWall=time.time(),pageT=e.get('t',0))
                     raw_feedback=os.environ.get('PROBE_RAW_MOUSE')=='1' or (os.environ.get('PROBE_FOCUS')=='settings-ui' and '-clean-' in device)
-                    if not raw_feedback and e.get('pointerType')=='mouse' and e.get('isTrusted') and e.get('x',-1)>=0 and e.get('y',-1)>=0:state.update(x=e['x'],y=e['y'],buttons=e.get('buttons'),t=e.get('t'))
-                    if raw_feedback and e.get('origin')=='public-native-api' and e.get('api')=='GCMouse' and e.get('type')=='native-move':
-                        state.update(x=e['x'],y=e['y'],buttons=e['buttons'],t=e['t'],coordinateSource='GCMouse-relative')
+                    native_feedback='-clean-' in device
+                    if not native_feedback and not raw_feedback and e.get('pointerType')=='mouse' and e.get('isTrusted'):
+                        state.update(x=e['x'],y=e['y'],buttons=e.get('buttons'),t=e.get('t'),positionValid=e['x']>=0 and e['y']>=0,positionWall=state.get('pageWall',time.time())+(e.get('t',0)-state.get('pageT',0))/1000,coordinateSource='trusted-DOM')
+                    if e.get('origin')=='public-native-api':
+                        native_move=e.get('type')=='native-move' and ((raw_feedback and e.get('api')=='GCMouse') or (native_feedback and not raw_feedback and e.get('api')=='UIKit'))
+                        native_button=native_feedback and e.get('type')=='native-button' and e.get('api')=='GCMouse'
+                        if native_move or native_button:
+                            state.update(x=e['x'],y=e['y'],buttons=e['buttons'],t=e['t'],positionValid=True,positionWall=e['nativeWall'],coordinateSource='GCMouse-relative' if raw_feedback else 'UIKit')
                 if session:ACKED_BATCHES[key]=batch
             self.send_response(204);self.end_headers()
         except (ValueError,TypeError):
@@ -92,3 +97,4 @@ class Handler(BaseHTTPRequestHandler):
 
 if __name__=='__main__':
     ThreadingHTTPServer(('127.0.0.1',8765),Handler).serve_forever()
+
