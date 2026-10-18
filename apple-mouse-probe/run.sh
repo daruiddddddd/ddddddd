@@ -67,6 +67,14 @@ with (Path('output')/(kind+'-open.log')).open('w') as log:
             time.sleep(1)
     print('Safari ready:',p.exists() and 'page-ready' in p.read_text(),flush=True)
 PY
+  if [[ "${PROBE_FOCUS:-}" == "html-lifecycle" ]]; then
+    # Keep failing input gates distinct from completion of all planned phases.
+    python3 html-lifecycle.py "$kind" "$udid" >"output/$kind-html-lifecycle.log" 2>&1 || phase_status=$?
+    printf '%s\n' "${phase_status:-0}" >"output/$kind-html-lifecycle-exit.txt"
+    python3 bounded.py 20 xcrun simctl shutdown "$udid" >>"output/$kind-boot.log" 2>&1 || true
+    current_device=''
+    continue
+  fi
   if [[ "${PROBE_FOCUS:-}" == "universal-only" ]]; then
     phases=(universal)
     if [[ "$kind" == "iphone" ]]; then phases=(universal universal-on); fi
@@ -191,4 +199,8 @@ PY
   current_device=''
 done < output/plan.tsv
 printf 'All planned phases completed\n' > output/phases-completed.txt
-python3 assess.py
+if [[ "${PROBE_FOCUS:-}" == "html-lifecycle" ]]; then
+  exit "$(cat "output/${PROBE_DEVICE}-html-lifecycle-exit.txt")"
+else
+  python3 assess.py
+fi
