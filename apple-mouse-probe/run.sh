@@ -90,7 +90,7 @@ PY
     continue
   fi
   if [[ "$kind" == "iphone" ]]; then
-    if [[ "${PROBE_FOCUS:-}" == "native-policy" || "${PROBE_FOCUS:-}" == "native-repeat" ]]; then
+    if [[ "${PROBE_FOCUS:-}" == "native-policy" || "${PROBE_FOCUS:-}" == "native-repeat" || "${PROBE_FOCUS:-}" == "native-universal" ]]; then
       python3 bounded.py 35 xcrun simctl spawn "$udid" "$(pwd)/output/accessibility-setup" 1 >"output/$kind-accessibility-setup.log" 2>&1 || true
       sleep 20
     else
@@ -103,10 +103,11 @@ PY
     sleep 20
     fi
   fi
-  if [[ "${PROBE_FOCUS:-}" == "native-policy" || "${PROBE_FOCUS:-}" == "native-repeat" ]]; then
+  if [[ "${PROBE_FOCUS:-}" == "native-policy" || "${PROBE_FOCUS:-}" == "native-repeat" || "${PROBE_FOCUS:-}" == "native-universal" ]]; then
     python3 bounded.py 45 xcrun simctl install "$udid" output/NativeProbe.app >"output/$kind-native-install.log" 2>&1 || python3 bounded.py 45 xcrun simctl install "$udid" output/NativeProbe.app >>"output/$kind-native-install.log" 2>&1
     phases=(policy-default policy-direct)
     if [[ "${PROBE_FOCUS:-}" == "native-repeat" ]]; then phases=(repeat-first repeat-reused repeat-recreated);fi
+    if [[ "${PROBE_FOCUS:-}" == "native-universal" ]]; then phases=(universal-native-first universal-native-relaunch);fi
     for phase in "${phases[@]}"; do
       if [[ "$phase" == "policy-direct" || "${PROBE_DIRECT_BUTTONS:-}" == "1" ]]; then
         python3 bounded.py 30 xcrun simctl launch "$udid" org.jwprobe.nativeinput --probe-phase "$phase" --direct-buttons >"output/$kind-$phase-launch.log" 2>&1
@@ -122,7 +123,9 @@ for _ in range(30):
     time.sleep(1)
 print('Native policy page ready:',p.exists() and 'page-ready' in p.read_text(),flush=True)
 PY
-      if [[ "$phase" == "repeat-first" ]]; then
+      if [[ "${PROBE_FOCUS:-}" == "native-universal" ]]; then
+        PROBE_CHANNEL="$kind-$phase" python3 bounded.py 90 output/universal "$(xcode-select -p)" "$udid" >"output/$kind-$phase-injector.log" 2>&1 || true
+      elif [[ "$phase" == "repeat-first" ]]; then
         PROBE_KEEP_SERVICES=1 PROBE_DEVICE="$kind-$phase" python3 bounded.py 90 output/injector "$(xcode-select -p)" "$udid" >"output/$kind-$phase-injector.log" 2>&1 || true
       elif [[ "$phase" == "repeat-reused" ]]; then
         PROBE_KEEP_SERVICES=1 PROBE_REUSE_SERVICES=1 PROBE_DEVICE="$kind-$phase" python3 bounded.py 90 output/injector "$(xcode-select -p)" "$udid" >"output/$kind-$phase-injector.log" 2>&1 || true
