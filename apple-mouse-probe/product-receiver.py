@@ -8,17 +8,17 @@ from http.server import ThreadingHTTPServer
 from urllib.parse import urlparse
 from receiver import Handler,OUT
 
-url='https://jw1036-rebuild-lab.ryu08ma.chatgpt.site/?v=mouse-product-042'
+url='https://jw1036-rebuild-lab.ryu08ma.chatgpt.site/?v=mouse-product-046'
 request=urllib.request.Request(url,headers={'User-Agent':'Mozilla/5.0'})
 with urllib.request.urlopen(request,timeout=30) as response:
     data=response.read().decode('utf-8').replace('\r\n','\n').encode('utf-8')
 # Exact application prefix verified against the current published local build.
 # Hosting may append its own challenge script; that suffix is not application code.
-prefix=data[:252559]
+prefix=data[:252856]
 digest=hashlib.sha256(prefix).hexdigest()
-if digest!='70be8c5e6210c798f1d8d0d2b763b1c77e7de12c72e462f19772f44dbcd24720':
+if digest!='be3c8381fe54f540a8d28a7431a6002f7282fac8571c7ed120759036033fb8a1':
     raise RuntimeError('Public application changed; refusing to test an unidentified build')
-(OUT/'product-source.json').write_text(json.dumps({'url':url,'normalizedApplicationPrefixBytes':len(prefix),'sha256':digest,'version':'0.21.0-pen','instrumentation':'Read-only event/visible zoom recorder; bundled public sample opened programmatically','publicSiteModified':False},indent=2))
+(OUT/'product-source.json').write_text(json.dumps({'url':url,'normalizedApplicationPrefixBytes':len(prefix),'sha256':digest,'version':'0.21.1-ipad-status','instrumentation':'Read-only event/visible zoom recorder; bundled public sample opened programmatically','publicSiteModified':False},indent=2))
 SCRIPT=r'''<script>
 (()=>{
  const device=new URLSearchParams(location.search).get('device'),session=crypto.randomUUID();
