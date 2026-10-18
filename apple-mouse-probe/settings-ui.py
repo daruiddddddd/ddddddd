@@ -52,9 +52,14 @@ def locate_switch():
   switches=[n for n in matches if 'switch' in str(n.get('type','')).lower() or 'switch' in str(n.get('role','')).lower()]
   if len(switches)==1:return switches[0]
   if len(matches)==1 and ('value' in matches[0] or 'AXValue' in matches[0]):return matches[0]
-  for target in ('AssistiveTouch','Touch','Accessibility'):
-   candidates=[n for n in find(t,target) if n.get('frame') and 'statictext' not in str(n.get('type','')).lower() and 'back' not in str(n.get('role_description',n.get('roleDescription',''))).lower() and n.get('AXIdentifier',n.get('identifier'))!='BackButton']
-   if len(candidates)==1 and 'switch' not in str(candidates[0].get('type','')).lower():tap(candidates[0]);break
+  roots=t if isinstance(t,list) else [t]
+  screen=next((n.get('frame') for n in roots if n.get('frame') and n['frame'].get('height',0)>300),None)
+  for target in ('AssistiveTouch','Touch','Pointer Control','Accessibility'):
+   # AXe includes headings and nested buttons. Only tap a visible actual button;
+   # a section title is not a navigation control (run49).
+   candidates=[n for n in find(t,target) if n.get('type')=='Button' and n.get('frame') and 'back' not in str(n.get('role_description','')).lower() and screen and 110<n['frame']['y']+n['frame']['height']/2<screen['height']-35]
+   if candidates:
+    tap(max(candidates,key=lambda n:n['frame']['width']*n['frame']['height']));break
   else:
    roots=t if isinstance(t,list) else [t]
    f=next((n.get('frame') for n in roots if n.get('frame') and n['frame'].get('height',0)>300),None)
@@ -62,7 +67,8 @@ def locate_switch():
    x=f['x']+f['width']*.6
    ax(['swipe','--start-x',str(x),'--start-y',str(f['y']+f['height']*.8),'--end-x',str(x),'--end-y',str(f['y']+f['height']*.3),'--duration','0.5'],'scroll-observed')
    time.sleep(1)
- raise RuntimeError('Perform Touch Gestures switch not found in actual Settings UI')
+ report['lastVisibleControls']=[{'label':label(n),'type':n.get('type'),'value':n.get('AXValue'),'frame':n.get('frame')} for n in nodes(t) if label(n) and n.get('type') in ('Button','Switch','Heading')]
+ raise LookupError('Perform Touch Gestures switch not found in actual Settings UI')
 original=None;axe=None;old_at=None
 try:
  request=urllib.request.Request(download,headers={'User-Agent':'jw-input-probe'})
@@ -86,12 +92,17 @@ try:
  if not m:raise RuntimeError('Original AssistiveTouch value unavailable')
  old_at=m.group(1);time.sleep(15)
  command(['output/injector',developer,udid],'create-mouse',timeout=60,env=dict(os.environ,PROBE_CREATE_ONLY='1',PROBE_KEEP_SERVICES='1'))
- n=locate_switch();original=value(n);report['originalTouchGestures']=original
- if original:tap(n)
- after=value(locate_switch());report['touchGesturesAfter']=after
- if after:raise RuntimeError('UI switch did not turn off')
- report['settingsUIChanged']=original
- sim(['io',udid,'screenshot',str(out/'settings-finger-off.png')],'settings-screenshot',check=False)
+ try:
+  n=locate_switch();original=value(n);report['originalTouchGestures']=original
+  if original:tap(n)
+  after=value(locate_switch());report['touchGesturesAfter']=after
+  if after:raise RuntimeError('UI switch did not turn off')
+  report['settingsUIChanged']=original
+  report['inputCondition']='observed-touch-gestures-off'
+ except LookupError as e:
+  report['settingsUnavailable']=str(e)
+  report['inputCondition']='unchanged-settings-with-DeviceHub; NOT touch-gestures-off'
+ sim(['io',udid,'screenshot',str(out/'settings-observed.png')],'settings-screenshot',check=False)
  env=dict(os.environ,PROBE_NO_FINGER='0',PROBE_RAW_MOUSE='1')
  report['nativeExit']=command([sys.executable,'continuous-control.py',kind,udid],'native-raw',timeout=330,env=env,check=False).returncode
  env=dict(os.environ,PROBE_NO_FINGER='0',PROBE_RAW_MOUSE='0')
