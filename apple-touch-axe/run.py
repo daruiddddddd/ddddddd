@@ -37,8 +37,8 @@ class Handler(BaseHTTPRequestHandler):
   self.send_response(200);self.end_headers()
 try:
  report['host']=cmd(['sw_vers'],'host')+cmd(['xcodebuild','-version'],'xcode')
- raw=urllib.request.urlopen('https://jw1036-rebuild-lab.ryu08ma.chatgpt.site/?v=0240',timeout=30).read().decode().replace('\r\n','\n').encode();prefix=raw[:238952]
- if hashlib.sha256(prefix).hexdigest()!='b1af457e01a2d4f09db4ced2e9db87a10772747bbff44d5fc1719db3c489ad36':raise RuntimeError('Public CAD hash mismatch')
+ raw=urllib.request.urlopen(urllib.request.Request('https://jw1036-rebuild-lab.ryu08ma.chatgpt.site/?v=0240',headers={'User-Agent':'Mozilla/5.0'}),timeout=30).read().decode().replace('\r\n','\n').encode();prefix=raw[:238226]
+ if hashlib.sha256(prefix).hexdigest()!='1ee65677f9ea11d0efff2758299a0dd0421a2f5e5f4e4d4e0fe918eddf969c63':raise RuntimeError('Public CAD hash mismatch')
  report['publicCodeSha256']=hashlib.sha256(prefix).hexdigest()
  fixture=json.loads((ROOT.parent/'apple-touch-probe/fixture.json').read_text())['base64']
  script=r'''<script>(()=>{
@@ -69,3 +69,4 @@ finally:
   except Exception as e:report['cleanupError']=str(e)
  save()
 print(json.dumps({'passed':report.get('passed'),'cases':len(report['cases']),'error':report.get('error')}));raise SystemExit(0 if report.get('passed') else 2)
+
