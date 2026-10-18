@@ -27,7 +27,9 @@ def rows(path):
     return path.read_text().splitlines() if path.exists() else []
 
 if kind=='iphone':
-    sim(['spawn',udid,str(Path('output/accessibility-setup').resolve()),'0' if raw_mouse else '1'],kind+'-accessibility-setup.log')
+    # The simulator's mouse service received no input at all with AT off in
+    # run43. Keep raw coordinates and compare AT on; never infer missing edges.
+    sim(['spawn',udid,str(Path('output/accessibility-setup').resolve()),'1'],kind+'-accessibility-setup.log')
     time.sleep(20)
 
 try:
