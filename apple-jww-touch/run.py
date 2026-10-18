@@ -110,13 +110,17 @@ def prepare_files(config):
  sdk=cmd(['xcrun','--sdk','iphonesimulator','--show-sdk-path'],'sdk').strip();arch=cmd(['uname','-m'],'arch').strip()
  cmd(['xcrun','clang','-fobjc-arc','-target',arch+'-apple-ios17.0-simulator','-isysroot',sdk,'-framework','UIKit','-framework','Foundation',str(source),'-o',str(app/'JWWFiles')],'compile-files-helper',timeout=120)
  (app/'Info.plist').write_bytes(plistlib.dumps({'CFBundleExecutable':'JWWFiles','CFBundleIdentifier':'org.jwprobe.files','CFBundleName':'JWW Samples','CFBundleDisplayName':'JWW Samples','CFBundleVersion':'1','CFBundleShortVersionString':'1','CFBundlePackageType':'APPL','MinimumOSVersion':'17.0','UIDeviceFamily':[1,2],'UIFileSharingEnabled':True,'LSSupportsOpeningDocumentsInPlace':True,'UILaunchScreen':{}}))
- cmd(['codesign','--force','--sign','-',str(app)],'sign-files');cmd(['xcrun','simctl','install',udid,str(app)],'install-files');container=Path(cmd(['xcrun','simctl','get_app_container',udid,'org.jwprobe.files','data'],'files-container').strip());documents=container/'Documents';documents.mkdir(exist_ok=True)
+ cmd(['codesign','--force','--sign','-',str(app)],'sign-files');documents=OUT/'fixture-files';documents.mkdir(exist_ok=True)
  for s in config['samples']:
   data=urllib.request.urlopen(s['url'],timeout=30).read() if s.get('url') else byhash[s['sha256']]
   if hashlib.sha256(data).hexdigest()!=s['sha256']:raise RuntimeError('Public sample hash mismatch')
   (documents/s['name']).write_bytes(data)
- cmd(['xcrun','simctl','launch',udid,'org.jwprobe.files'],'register-files');time.sleep(1)
  report['samples']=config['samples'];save()
+
+def install_files():
+ cmd(['xcrun','simctl','install',udid,str(OUT/'JWWFiles.app')],'install-files',timeout=120);container=Path(cmd(['xcrun','simctl','get_app_container',udid,'org.jwprobe.files','data'],'files-container',timeout=120).strip());documents=container/'Documents';documents.mkdir(exist_ok=True)
+ for source in (OUT/'fixture-files').iterdir():shutil.copy2(source,documents/source.name)
+ cmd(['xcrun','simctl','launch',udid,'org.jwprobe.files'],'register-files',timeout=120);time.sleep(1)
 
 try:
  config=json.loads((ROOT/'config.json').read_text());report['host']=cmd(['sw_vers'],'host')+cmd(['xcodebuild','-version'],'xcode')
@@ -128,12 +132,13 @@ try:
   devices=[d for d in inventory['devices'].get(rid,[]) if d.get('isAvailable') and d['name'].startswith('iPhone' if kind=='iphone' else 'iPad')]
   if devices:device=devices[0];report['device']={**device,'runtime':runtimes[rid]['version']};udid=device['udid'];break
  if not udid:raise RuntimeError('No simulator')
+ report['stage']='prepare-public-files';save();prepare_files(config)
  report['stage']='appium-start';save();appium_log=(OUT/'appium.log').open('w');appium=subprocess.Popen(['appium','server','--address','127.0.0.1','--port','4723','--log-timestamp','--log-level','debug'],stdout=appium_log,stderr=subprocess.STDOUT)
  for _ in range(180):
   try:req('GET','/status',timeout=2);break
   except Exception:time.sleep(1)
  else:raise RuntimeError('Appium server startup failed')
- cmd(['xcrun','simctl','boot',udid],'boot',check=False);cmd(['xcrun','simctl','bootstatus',udid,'-b'],'bootstatus',timeout=240);prepare_files(config)
+ cmd(['xcrun','simctl','boot',udid],'boot',check=False);cmd(['xcrun','simctl','bootstatus',udid,'-b'],'bootstatus',timeout=240);install_files()
  report['stage']='native-session';save();caps={'platformName':'iOS','appium:automationName':'XCUITest','appium:udid':udid,'appium:deviceName':device['name'],'appium:platformVersion':report['device']['runtime'],'appium:bundleId':'com.apple.mobilesafari','appium:noReset':True,'appium:newCommandTimeout':180,'appium:wdaLaunchTimeout':180000,'appium:waitForIdleTimeout':1,'appium:showXcodeLog':True}
  session=req('POST','/session',{'capabilities':{'alwaysMatch':caps,'firstMatch':[{}]}},timeout=780);sid=session['sessionId'];report['stage']='open-safari';save();call('POST','/execute/sync',{'script':'mobile: deepLink','args':[{'url':'http://127.0.0.1:8765/','bundleId':'com.apple.mobilesafari'}]});wait(lambda:latest.get('version')==config['version'],60)
  scale=latest['viewport']['scale'];offset=[0,0];cal=[latest['screen']['width']*.55,latest['screen']['height']*.55];n=len(events);native([[cal[0]/scale,cal[1]/scale]]);wait(lambda:any(e['type']=='pointerdown' and e.get('pointerType')=='touch' and e.get('isTrusted') for e in events[n:]));e=next(e for e in events[n:] if e['type']=='pointerdown');offset=[cal[0]-e['x']*scale,cal[1]-e['y']*scale];report['calibration']={'input':cal,'received':e,'offset':offset};report['stage']='files-and-touch';save()
