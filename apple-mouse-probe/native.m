@@ -13,6 +13,7 @@ static CGPoint bridgePoint;
 static BOOL hasBridgePoint=NO;
 static NSUInteger bridgeButtons=0;
 static BOOL rawMouseMode=NO;
+static NSUInteger nextMouseId=0;
 static void record(NSDictionary *data) {
     NSMutableDictionary *row=[data mutableCopy];
     row[@"uptime"]=@(NSProcessInfo.processInfo.systemUptime);
@@ -37,7 +38,7 @@ static NSUInteger receivedButtons(GCMouseInput *input){@synchronized(buttonState
 static void observeMouse(GCMouse *mouse) {
     if(!mouse || [observedMice containsObject:mouse])return;
     [observedMice addObject:mouse]; mouse.handlerQueue=mouseQueue;
-    NSUInteger mouseId=observedMice.count;
+    NSUInteger mouseId=++nextMouseId;
     record(@{@"source":@"GCMouse",@"type":@"connected",@"mouseId":@(mouseId),@"identity":[NSString stringWithFormat:@"%p",mouse],@"category":mouse.productCategory?:@"",@"vendor":mouse.vendorName?:@""});
     GCMouseInput *input=mouse.mouseInput;
     @synchronized(buttonStates){buttonStates[[NSValue valueWithNonretainedObject:input]]=@(buttons(input));}
@@ -141,6 +142,18 @@ static void observeMouse(GCMouse *mouse) {
     [NSNotificationCenter.defaultCenter addObserverForName:GCMouseDidConnectNotification object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *n){ observeMouse(n.object); }];
     [NSNotificationCenter.defaultCenter addObserverForName:GCMouseDidDisconnectNotification object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *n){
         record(@{@"source":@"GCMouse",@"type":@"disconnected",@"identity":[NSString stringWithFormat:@"%p",n.object],@"mouseCount":@(GCMouse.mice.count)});
+        GCMouse *mouse=n.object;
+        // A disconnected object may be reported again on reconnect. Retaining
+        // it in observedMice previously prevented reinstallation of handlers.
+        // Dispose subscriptions, never fabricate missing button-up events.
+        GCMouseInput *input=mouse.mouseInput;
+        input.mouseMovedHandler=nil;
+        input.leftButton.pressedChangedHandler=nil;
+        input.rightButton.pressedChangedHandler=nil;
+        input.middleButton.pressedChangedHandler=nil;
+        input.scroll.valueChangedHandler=nil;
+        [observedMice removeObject:mouse];
+        @synchronized(buttonStates){[buttonStates removeObjectForKey:[NSValue valueWithNonretainedObject:input]];}
     }];
     [NSNotificationCenter.defaultCenter addObserverForName:GCMouseDidBecomeCurrentNotification object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *n){ observeMouse(n.object); }];
 }
@@ -167,3 +180,4 @@ static void observeMouse(GCMouse *mouse) {
 }
 @end
 int main(int argc,char **argv) { @autoreleasepool { return UIApplicationMain(argc,argv,NSStringFromClass(ProbeApplication.class),NSStringFromClass(ProbeDelegate.class)); } }
+
