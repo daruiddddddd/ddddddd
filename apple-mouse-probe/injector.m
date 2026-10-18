@@ -148,7 +148,7 @@ int main(int argc,const char **argv){@autoreleasepool{
     }
     if(getenv("PROBE_REUSE_SERVICES"))printf("Reusing previously created pointer/mouse services\n");
     else for(const char **name=(const char*[]){"IndigoHIDMessageToCreatePointerService","IndigoHIDMessageToCreateMouseService",NULL};*name;name++){
-        if(getenv("PROBE_MOUSE_ONLY") && strcmp(*name,"IndigoHIDMessageToCreatePointerService")==0){printf("Skipping separate pointer service: mouse-only control\n");continue;}
+        if(strcmp(getenv("PROBE_MOUSE_ONLY")?:"","1")==0 && strcmp(*name,"IndigoHIDMessageToCreatePointerService")==0){printf("Skipping separate pointer service: mouse-only control\n");continue;}
         ServiceFn f=(ServiceFn)dlsym(kit,*name);printf("service %s available=%d\n",*name,f!=NULL);if(f)deliver(f());
     }
     settle(3);
