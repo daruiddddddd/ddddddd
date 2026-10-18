@@ -152,6 +152,7 @@ int main(int argc,const char **argv){@autoreleasepool{
         ServiceFn f=(ServiceFn)dlsym(kit,*name);printf("service %s available=%d\n",*name,f!=NULL);if(f)deliver(f());
     }
     settle(3);
+    if(getenv("PROBE_CREATE_ONLY")){printf("Services created only; no input injected\n");return 0;}
     center();
     for(uint32_t button=1;!getenv("PROBE_CHORDS_ONLY") && button<=2;button++){
         printf("BEGIN single-button %u\n",button);center();mouse(0,0,button);mouse(0,0,0);
