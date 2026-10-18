@@ -1,5 +1,5 @@
 """Separate elapsed-time/input-service effects from app relaunch effects."""
-import json, os, shutil, subprocess, sys, time
+import json, os, shutil, subprocess, sys, time, plistlib
 from pathlib import Path
 
 kind, udid=sys.argv[1:]
@@ -27,6 +27,22 @@ def ready(channel):
 def rows(path):
     return path.read_text().splitlines() if path.exists() else []
 
+def app_container():
+    try:
+        return Path(subprocess.check_output(['xcrun','simctl','get_app_container',udid,'org.jwprobe.nativeinput','data'],text=True,timeout=20).strip())
+    except (subprocess.TimeoutExpired,subprocess.CalledProcessError):
+        # Read the selected disposable simulator's container metadata only.
+        # run44 timed out after input, losing API logs despite successful cleanup.
+        root=Path.home()/'Library/Developer/CoreSimulator/Devices'/udid/'data/Containers/Data/Application'
+        matches=[]
+        for metadata in root.glob('*/.com.apple.mobile_container_manager.metadata.plist'):
+            try:
+                if plistlib.loads(metadata.read_bytes()).get('MCMMetadataIdentifier')=='org.jwprobe.nativeinput':matches.append(metadata.parent)
+            except (ValueError,OSError,plistlib.InvalidFileException):pass
+        if len(matches)!=1:raise RuntimeError('Cannot identify a unique probe container for log recovery')
+        print('Recovered exact probe container from simulator metadata',flush=True)
+        return matches[0]
+
 try:
     if kind=='iphone':
         # The simulator's mouse service received no input at all with AT off in
@@ -36,6 +52,7 @@ try:
         time.sleep(20)
     if sim(['install',udid,'output/NativeProbe.app'],kind+'-native-install.log',60):
         raise RuntimeError('Native diagnostic install failed')
+    container=app_container()
     channel=kind+'-clean-first'
     dom_offset=api_offset=0
     for index,phase in enumerate(['continuous-first','continuous-same-process','continuous-relaunch']):
@@ -51,8 +68,7 @@ try:
         if index>0: env['PROBE_REUSE_SERVICES']='1'
         code=command(['output/injector',developer,udid],label+'-injector.log',90,env)
         time.sleep(2)
-        container=subprocess.check_output(['xcrun','simctl','get_app_container',udid,'org.jwprobe.nativeinput','data'],text=True,timeout=20).strip()
-        api_file=Path(container)/'Documents/native-events.jsonl'
+        api_file=container/'Documents/native-events.jsonl'
         api=rows(api_file);dom=rows(out/(channel+'-events.jsonl'))
         shutil.copyfile(api_file,out/(label+'-api-cumulative.jsonl'))
         shutil.copyfile(out/(channel+'-events.jsonl'),out/(label+'-events-cumulative.jsonl'))
