@@ -12,6 +12,7 @@ static WKWebView *bridgeView;
 static CGPoint bridgePoint;
 static BOOL hasBridgePoint=NO;
 static NSUInteger bridgeButtons=0;
+static BOOL rawMouseMode=NO;
 static void record(NSDictionary *data) {
     NSMutableDictionary *row=[data mutableCopy];
     row[@"uptime"]=@(NSProcessInfo.processInfo.systemUptime);
@@ -40,7 +41,20 @@ static void observeMouse(GCMouse *mouse) {
     record(@{@"source":@"GCMouse",@"type":@"connected",@"mouseId":@(mouseId),@"identity":[NSString stringWithFormat:@"%p",mouse],@"category":mouse.productCategory?:@"",@"vendor":mouse.vendorName?:@""});
     GCMouseInput *input=mouse.mouseInput;
     @synchronized(buttonStates){buttonStates[[NSValue valueWithNonretainedObject:input]]=@(buttons(input));}
-    input.mouseMovedHandler=^(GCMouseInput *m,float dx,float dy){ record(@{@"source":@"GCMouse",@"type":@"move",@"mouseId":@(mouseId),@"dx":@(dx),@"dy":@(dy),@"buttons":@(receivedButtons(m))}); };
+    input.mouseMovedHandler=^(GCMouseInput *m,float dx,float dy){
+        NSUInteger snapshot=receivedButtons(m);
+        record(@{@"source":@"GCMouse",@"type":@"move",@"mouseId":@(mouseId),@"dx":@(dx),@"dy":@(dy),@"buttons":@(snapshot)});
+        if(rawMouseMode)dispatch_async(dispatch_get_main_queue(),^{
+            if(!bridgeView || bridgeView.bounds.size.width<=0)return;
+            if(!hasBridgePoint){bridgePoint=CGPointMake(bridgeView.bounds.size.width*.4,bridgeView.bounds.size.height*.4);hasBridgePoint=YES;}
+            // Raw GCMouse Y is positive upward; UIKit/CSS Y is downward.
+            // This virtual cursor uses real deltas, not inferred button states.
+            bridgePoint.x=fmin(bridgeView.bounds.size.width-1,fmax(0,bridgePoint.x+dx));
+            bridgePoint.y=fmin(bridgeView.bounds.size.height-1,fmax(0,bridgePoint.y-dy));
+            bridgeButtons=snapshot;
+            bridge(@{@"type":@"native-move",@"api":@"GCMouse",@"mouseId":@(mouseId),@"dx":@(dx),@"dy":@(dy),@"coordinateMode":@"relative-api"});
+        });
+    };
     for(NSDictionary *entry in @[@{@"name":@"left",@"button":input.leftButton?:NSNull.null},@{@"name":@"right",@"button":input.rightButton?:NSNull.null},@{@"name":@"middle",@"button":input.middleButton?:NSNull.null}]) {
         if(entry[@"button"]==NSNull.null)continue;
         GCControllerButtonInput *button=entry[@"button"];
@@ -75,7 +89,7 @@ static void observeMouse(GCMouse *mouse) {
         [touches addObject:@{@"phase":@(touch.phase),@"touchType":@(touch.type),@"x":@(p.x),@"y":@(p.y),@"timestamp":@(touch.timestamp)}];
     }
     if(touches.count || event.buttonMask)record(@{@"source":@"UIKit",@"type":@"event",@"eventType":@(event.type),@"buttons":@(event.buttonMask),@"timestamp":@(event.timestamp),@"touches":touches});
-    for(UITouch *touch in event.allTouches)if(touch.type==UITouchTypeIndirectPointer && bridgeView){
+    for(UITouch *touch in event.allTouches)if(!rawMouseMode && touch.type==UITouchTypeIndirectPointer && bridgeView){
         CGPoint p=[touch locationInView:bridgeView];
         if(!hasBridgePoint || !CGPointEqualToPoint(p,bridgePoint)){
             bridgePoint=p; hasBridgePoint=YES;
@@ -144,6 +158,7 @@ static void observeMouse(GCMouse *mouse) {
 @interface ProbeDelegate : UIResponder <UIApplicationDelegate> @end
 @implementation ProbeDelegate
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)options {
+    rawMouseMode=[NSProcessInfo.processInfo.arguments containsObject:@"--raw-mouse"];
     NSString *path=[NSSearchPathForDirectoriesInDomains(NSDocumentDirectory,NSUserDomainMask,YES).firstObject stringByAppendingPathComponent:@"native-events.jsonl"];
     [NSFileManager.defaultManager createFileAtPath:path contents:nil attributes:nil];
     logFile=[NSFileHandle fileHandleForWritingAtPath:path]; observedMice=[NSMutableSet set]; buttonStates=[NSMutableDictionary dictionary];
