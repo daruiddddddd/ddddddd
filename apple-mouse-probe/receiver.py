@@ -44,7 +44,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         parsed=urlparse(self.path)
         device=parse_qs(parsed.query).get('device',[''])[0]
-        allowed={k+p for k in ('iphone','ipad') for p in ('','-native','-universal','-locked','-trackpad','-off-before','-off-after','-native-on','-policy-default','-policy-direct','-universal-on','-repeat-first','-repeat-reused','-repeat-recreated')}
+        allowed={k+p for k in ('iphone','ipad') for p in ('','-native','-universal','-locked','-trackpad','-off-before','-off-after','-native-on','-policy-default','-policy-direct','-universal-on','-repeat-first','-repeat-reused','-repeat-recreated','-universal-native-first','-universal-native-relaunch')}
         if parsed.path!='/events' or device not in allowed:
             self.send_error(400);return
         size=int(self.headers.get('Content-Length','0'))
