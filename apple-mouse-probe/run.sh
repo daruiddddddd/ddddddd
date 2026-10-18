@@ -41,6 +41,10 @@ receiver_pid=$!
 current_device=''
 cleanup(){ kill "$receiver_pid" 2>/dev/null || true; if [[ -n "$current_device" ]]; then python3 bounded.py 20 xcrun simctl shutdown "$current_device" >/dev/null 2>&1 || true; fi; }
 trap 'status=$?; trap - EXIT; cleanup; exit "$status"' EXIT
+if [[ "${PROBE_FOCUS:-}" == "settings-ui" ]]; then
+  hub="$(xcode-select -p)/../Applications/DeviceHub.app"
+  python3 bounded.py 20 open -g "$hub" >output/device-hub-start.log 2>&1
+fi
 while IFS=$'\t' read -r kind udid; do
   current_device="$udid"
   printf '\nStarting %s %s\n' "$kind" "$udid"
@@ -51,6 +55,7 @@ while IFS=$'\t' read -r kind udid; do
   if [[ "${PROBE_HEADLESS:-0}" != "1" && -d "$(xcode-select -p)/Applications/Simulator.app" ]]; then
     python3 bounded.py 20 open -a "$(xcode-select -p)/Applications/Simulator.app" --args -CurrentDeviceUDID "$udid" >>"output/$kind-boot.log" 2>&1 || true
   fi
+  if [[ "${PROBE_FOCUS:-}" != "settings-ui" ]]; then
   python3 bounded.py 20 xcrun simctl io "$udid" screenshot "output/$kind-before.png" >>"output/$kind-boot.log" 2>&1 || true
   python3 - "$kind" "$udid" <<'PY'
 import sys,time
@@ -70,6 +75,7 @@ with (Path('output')/(kind+'-open.log')).open('w') as log:
             time.sleep(1)
     print('Safari ready:',p.exists() and 'page-ready' in p.read_text(),flush=True)
 PY
+  fi
   if [[ "${PROBE_FOCUS:-}" == "settings-ui" ]]; then
     python3 settings-ui.py "$kind" "$udid" >"output/$kind-settings-ui.log" 2>&1 || phase_status=$?
     printf '%s\n' "${phase_status:-0}" >"output/$kind-settings-ui-exit.txt"
