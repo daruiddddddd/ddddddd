@@ -42,6 +42,8 @@ def value(n):
  if str(v).lower() in ('0','off','false'):return False
  raise RuntimeError('Unknown switch value: '+repr(v))
 def locate_switch():
+ sim(['launch',udid,'com.apple.Preferences'],'settings-launch')
+ # This URL is optional; some runtimes reject it. The observed UI is authoritative.
  sim(['openurl',udid,'prefs:root=ACCESSIBILITY&path=TOUCH_REACHABILITY_TITLE/AIR_TOUCH_TITLE'],'settings-open',check=False)
  time.sleep(3)
  for attempt in range(12):
@@ -71,12 +73,18 @@ try:
  candidates=[p for p in folder.rglob('axe') if p.is_file() and not p.is_symlink()]
  if len(candidates)!=1:raise RuntimeError('Ambiguous AXe executable')
  axe=candidates[0].resolve();report['axeSHA256']=expected
+ developer=subprocess.check_output(['xcode-select','-p'],text=True).strip()
+ # AXe v1.8.0 scripts/e2e-environment.sh requires Device Hub on Xcode 27.
+ hub=Path(developer).parent/'Applications/DeviceHub.app'
+ if not hub.is_dir():raise RuntimeError('Selected Xcode Device Hub is unavailable')
+ command(['open','-g',str(hub)],'device-hub-start')
+ time.sleep(5)
+ report['deviceHubStarted']=True
  setup=sim(['spawn',udid,str((out/'accessibility-setup').resolve()),'1'],'at-on').stdout
  import re
  m=re.search(r'AssistiveTouch before=(\d)',setup)
  if not m:raise RuntimeError('Original AssistiveTouch value unavailable')
  old_at=m.group(1);time.sleep(15)
- developer=subprocess.check_output(['xcode-select','-p'],text=True).strip()
  command(['output/injector',developer,udid],'create-mouse',timeout=60,env=dict(os.environ,PROBE_CREATE_ONLY='1',PROBE_KEEP_SERVICES='1'))
  n=locate_switch();original=value(n);report['originalTouchGestures']=original
  if original:tap(n)
