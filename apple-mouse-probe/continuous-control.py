@@ -1,0 +1,69 @@
+"""Separate elapsed-time/input-service effects from app relaunch effects."""
+import json, os, shutil, subprocess, sys, time
+from pathlib import Path
+
+kind, udid=sys.argv[1:]
+out=Path('output')
+developer=subprocess.check_output(['xcode-select','-p'],text=True).strip()
+report={'physicalDeviceVerified':False,'publicHTMLFixed':False,'segments':[]}
+
+def command(args,log,timeout=35,env=None):
+    with (out/log).open('a') as f:
+        return subprocess.run([sys.executable,'bounded.py',str(timeout),*args],stdout=f,stderr=f,env=env).returncode
+
+def sim(args,log,timeout=35):
+    return command(['xcrun','simctl',*args],log,timeout)
+
+def ready(channel):
+    p=out/(channel+'-events.jsonl')
+    for _ in range(30):
+        if p.exists() and 'page-ready' in p.read_text(): return True
+        time.sleep(1)
+    return False
+
+def rows(path):
+    return path.read_text().splitlines() if path.exists() else []
+
+if kind=='iphone':
+    sim(['spawn',udid,str(Path('output/accessibility-setup').resolve()),'1'],kind+'-accessibility-setup.log')
+    time.sleep(20)
+
+try:
+    if sim(['install',udid,'output/NativeProbe.app'],kind+'-native-install.log',60):
+        raise RuntimeError('Native diagnostic install failed')
+    channel=kind+'-clean-first'
+    dom_offset=api_offset=0
+    for index,phase in enumerate(['continuous-first','continuous-same-process','continuous-relaunch']):
+        label=kind+'-'+phase
+        if index!=1:
+            if index==2: channel=kind+'-clean-relaunch'
+            launch=sim(['launch',udid,'org.jwprobe.nativeinput','--probe-phase',channel[len(kind)+1:],'--direct-buttons'],label+'-launch.log')
+            if launch or not ready(channel): raise RuntimeError('Native page did not load: '+phase)
+            dom_offset=api_offset=0
+        started=time.time()
+        env=dict(os.environ,PROBE_DEVICE=channel)
+        if index<2: env['PROBE_KEEP_SERVICES']='1'
+        if index>0: env['PROBE_REUSE_SERVICES']='1'
+        code=command(['output/injector',developer,udid],label+'-injector.log',90,env)
+        time.sleep(2)
+        container=subprocess.check_output(['xcrun','simctl','get_app_container',udid,'org.jwprobe.nativeinput','data'],text=True,timeout=20).strip()
+        api_file=Path(container)/'Documents/native-events.jsonl'
+        api=rows(api_file);dom=rows(out/(channel+'-events.jsonl'))
+        shutil.copyfile(api_file,out/(label+'-api-cumulative.jsonl'))
+        shutil.copyfile(out/(channel+'-events.jsonl'),out/(label+'-events-cumulative.jsonl'))
+        # Derived slices keep the original cumulative raw files alongside them.
+        # A repeated page header is metadata for viewport-based assessment only.
+        page=next((line for line in dom if json.loads(line).get('type')=='page-ready'),None)
+        dom_slice=dom[dom_offset:]
+        if page and not any(json.loads(line).get('type')=='page-ready' for line in dom_slice):dom_slice.insert(0,page)
+        (out/(label+'-api.jsonl')).write_text('\n'.join(api[api_offset:])+'\n')
+        (out/(label+'-events.jsonl')).write_text('\n'.join(dom_slice)+'\n')
+        report['segments'].append({'phase':phase,'channel':channel,'startedWall':started,'finishedWall':time.time(),'injectorExit':code,'sameApplicationProcess':index==1,'apiLines':[api_offset,len(api)],'domLines':[dom_offset,len(dom)]})
+        api_offset=len(api);dom_offset=len(dom)
+        print(json.dumps(report['segments'][-1]),flush=True)
+        if index in (1,2):sim(['terminate',udid,'org.jwprobe.nativeinput'],label+'-launch.log')
+finally:
+    sim(['terminate',udid,'org.jwprobe.nativeinput'],kind+'-final-terminate.log')
+    if kind=='iphone':sim(['spawn',udid,str(Path('output/accessibility-setup').resolve()),'0'],kind+'-accessibility-restore.log',20)
+    (out/(kind+'-continuous-control.json')).write_text(json.dumps(report,indent=2))
+if len(report['segments'])!=3:raise SystemExit(2)
