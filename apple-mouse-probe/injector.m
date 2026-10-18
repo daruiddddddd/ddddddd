@@ -154,25 +154,27 @@ int main(int argc,const char **argv){@autoreleasepool{
     settle(3);
     if(getenv("PROBE_CREATE_ONLY")){printf("Services created only; no input injected\n");return 0;}
     center();
+    // Calibration is a precondition. Unknown pointer position can activate OS
+    // controls, changing foreground state and invalidating all later samples.
+    if(!calibrationFailed){
     for(uint32_t button=1;!getenv("PROBE_CHORDS_ONLY") && button<=2;button++){
-        printf("BEGIN single-button %u\n",button);center();mouse(0,0,button);mouse(0,0,0);
+        center();if(calibrationFailed)break;printf("BEGIN single-button %u\n",button);mouse(0,0,button);mouse(0,0,0);
     }
     const uint32_t chords[4][5]={{0,1,3,1,0},{0,1,3,2,0},{0,2,3,2,0},{0,2,3,1,0}};
-    for(int i=0;i<4;i++){
-        printf("BEGIN chord %u %u %u %u %u\n",chords[i][0],chords[i][1],chords[i][2],chords[i][3],chords[i][4]);center();
+    for(int i=0;i<4&&!calibrationFailed;i++){
+        center();if(calibrationFailed)break;printf("BEGIN chord %u %u %u %u %u\n",chords[i][0],chords[i][1],chords[i][2],chords[i][3],chords[i][4]);
         for(int j=1;j<5;j++){mouse(0,0,chords[i][j]);if(chords[i][j]==3)for(int k=0;k<4;k++)mouse(12,10,3);if(j==3)settle(1);}
     }
     center();
-    if(!getenv("PROBE_CHORDS_ONLY")&&scrollEvent&&wrapScroll){for(int d=-1;d<=1;d+=2){Event e=scrollEvent(kCFAllocatorDefault,mach_absolute_time(),0,d*120,0,0);if(e){deliver(wrapScroll(e,target));CFRelease(e);}}}
+    if(!calibrationFailed&&!getenv("PROBE_CHORDS_ONLY")&&scrollEvent&&wrapScroll){for(int d=-1;d<=1;d+=2){Event e=scrollEvent(kCFAllocatorDefault,mach_absolute_time(),0,d*120,0,0);if(e){deliver(wrapScroll(e,target));CFRelease(e);}}}
     mouse(0,0,0);settle(2);
-    // Positive control only. Touch reception is never classified as mouse parity.
-    typedef void *(*TouchFn)(CGPoint*,CGPoint*,uint32_t,NSUInteger,CGSize,uint32_t);
-    TouchFn touch=(TouchFn)dlsym(kit,"IndigoHIDMessageForMouseNSEvent");
-    if(touch&&calibrationFailed){printf("BEGIN touch positive control; excluded from mouse pass\n");CGPoint p=CGPointMake(.5,.4);CGSize size=CGSizeMake(1,1);deliver(touch(&p,NULL,0x32,1,size,0));settle(.15);deliver(touch(&p,NULL,0x32,2,size,0));settle(2);}
+    }
+    if(calibrationFailed)printf("ABORT: no button, scroll, or touch injection after calibration failure\n");
     if(!getenv("PROBE_KEEP_SERVICES"))for(const char **name=(const char*[]){"IndigoHIDMessageToRemoveMouseService","IndigoHIDMessageToRemovePointerService",NULL};*name;name++){
         ServiceFn remove=(ServiceFn)dlsym(kit,*name);printf("cleanup service %s available=%d\n",*name,remove!=NULL);
         if(remove)deliver(remove());else rejected++;
     }
     printf("sent=%d rejected=%d callbacks=%d callbackErrors=%d; inspect Safari receiver logs before drawing any conclusion\n",sent,rejected,callbacks,callbackErrors);
-    return rejected?9:0;
+    return calibrationFailed?12:rejected?9:0;
 }}
+
