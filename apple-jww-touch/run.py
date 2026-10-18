@@ -21,7 +21,7 @@ def wait(predicate,seconds=15):
   if predicate():return
   time.sleep(.15)
  raise RuntimeError('Expected observed state did not arrive')
-def req(method,path='',body=None,timeout=240):
+def req(method,path='',body=None,timeout=120):
  target='http://127.0.0.1:4723'+path;request=urllib.request.Request(target,data=json.dumps(body).encode() if body is not None else None,method=method,headers={'Content-Type':'application/json'})
  try:
   with urllib.request.urlopen(request,timeout=timeout) as response:d=json.load(response)
@@ -138,9 +138,17 @@ try:
   try:req('GET','/status',timeout=2);break
   except Exception:time.sleep(1)
  else:raise RuntimeError('Appium server startup failed')
- cmd(['xcrun','simctl','boot',udid],'boot',check=False);cmd(['xcrun','simctl','bootstatus',udid,'-b'],'bootstatus',timeout=240);install_files()
+ developer=cmd(['xcode-select','-p'],'developer').strip();hub=Path(developer)/'Applications'/'DeviceHub.app'
+ if hub.exists():cmd(['open','-a',str(hub)],'device-hub',timeout=30)
+ cmd(['xcrun','simctl','boot',udid],'boot',check=False);cmd(['xcrun','simctl','bootstatus',udid,'-b'],'bootstatus',timeout=240)
  report['stage']='native-session';save();caps={'platformName':'iOS','appium:automationName':'XCUITest','appium:udid':udid,'appium:deviceName':device['name'],'appium:platformVersion':report['device']['runtime'],'appium:bundleId':'com.apple.mobilesafari','appium:noReset':True,'appium:newCommandTimeout':180,'appium:wdaLaunchTimeout':180000,'appium:waitForIdleTimeout':1,'appium:showXcodeLog':True}
- session=req('POST','/session',{'capabilities':{'alwaysMatch':caps,'firstMatch':[{}]}},timeout=780);sid=session['sessionId'];report['stage']='open-safari';save();call('POST','/execute/sync',{'script':'mobile: deepLink','args':[{'url':'http://127.0.0.1:8765/','bundleId':'com.apple.mobilesafari'}]});wait(lambda:latest.get('version')==config['version'],60)
+ caps['appium:waitForIdleTimeout']=0;caps['appium:autoLaunch']=False
+ try:session=req('POST','/session',{'capabilities':{'alwaysMatch':caps,'firstMatch':[{}]}},timeout=780);sid=session['sessionId']
+ except Exception as connection_error:
+  sessions=req('GET','/sessions',timeout=30)
+  if len(sessions)!=1:raise connection_error
+  sid=sessions[0].get('id',sessions[0].get('sessionId'));report['sessionConnectionRecovered']=str(connection_error)
+ install_files();report['stage']='open-safari';save();call('POST','/execute/sync',{'script':'mobile: deepLink','args':[{'url':'http://127.0.0.1:8765/','bundleId':'com.apple.mobilesafari'}]});wait(lambda:latest.get('version')==config['version'],60)
  scale=latest['viewport']['scale'];offset=[0,0];cal=[latest['screen']['width']*.55,latest['screen']['height']*.55];n=len(events);native([[cal[0]/scale,cal[1]/scale]]);wait(lambda:any(e['type']=='pointerdown' and e.get('pointerType')=='touch' and e.get('isTrusted') for e in events[n:]));e=next(e for e in events[n:] if e['type']=='pointerdown');offset=[cal[0]-e['x']*scale,cal[1]-e['y']*scale];report['calibration']={'input':cal,'received':e,'offset':offset};report['stage']='files-and-touch';save()
  for sample in config['samples']:
   picker=file_picker(sample);wait(lambda:latest.get('display')==sample['display']);report.setdefault('filePicker',[]).append({'name':sample['name'],**picker});b=state();check(sample['name']+'-open',{},b,b['count']==sample['entities'] and b['omissions']==sample['omissions']);shot(sample['name']+'-opened')
