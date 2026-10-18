@@ -35,7 +35,7 @@ kit="$(xcode-select -p)/Library/PrivateFrameworks/SimulatorKit.framework/Simulat
 if [[ ! -f "$kit" ]]; then kit="$(xcode-select -p)/../SharedFrameworks/SimulatorKit.framework/SimulatorKit"; fi
 strings "$kit" | grep 'IndigoHIDMessage \*' >output/simulator-kit-prototypes.txt || true
 receiver=receiver.py
-if [[ "${PROBE_FOCUS:-}" == "product-html" ]]; then receiver=product-receiver.py;fi
+if [[ "${PROBE_FOCUS:-}" == "product-html" || "${PROBE_FOCUS:-}" == "settings-ui" ]]; then receiver=product-receiver.py;fi
 python3 "$receiver" >output/receiver.log 2>&1 &
 receiver_pid=$!
 current_device=''
@@ -70,6 +70,13 @@ with (Path('output')/(kind+'-open.log')).open('w') as log:
             time.sleep(1)
     print('Safari ready:',p.exists() and 'page-ready' in p.read_text(),flush=True)
 PY
+  if [[ "${PROBE_FOCUS:-}" == "settings-ui" ]]; then
+    python3 settings-ui.py "$kind" "$udid" >"output/$kind-settings-ui.log" 2>&1 || phase_status=$?
+    printf '%s\n' "${phase_status:-0}" >"output/$kind-settings-ui-exit.txt"
+    python3 bounded.py 20 xcrun simctl shutdown "$udid" >>"output/$kind-boot.log" 2>&1 || true
+    current_device=''
+    continue
+  fi
   if [[ "${PROBE_FOCUS:-}" == "product-html" ]]; then
     python3 product-run.py "$kind" "$udid" >"output/$kind-product-run.log" 2>&1 || phase_status=$?
     printf '%s\n' "${phase_status:-0}" >"output/$kind-product-exit.txt"
@@ -216,7 +223,9 @@ PY
   current_device=''
 done < output/plan.tsv
 printf 'All planned phases completed\n' > output/phases-completed.txt
-if [[ "${PROBE_FOCUS:-}" == "product-html" ]]; then
+if [[ "${PROBE_FOCUS:-}" == "settings-ui" ]]; then
+  exit "$(cat "output/${PROBE_DEVICE}-settings-ui-exit.txt")"
+elif [[ "${PROBE_FOCUS:-}" == "product-html" ]]; then
   exit "$(cat "output/${PROBE_DEVICE}-product-exit.txt")"
 elif [[ "${PROBE_FOCUS:-}" == "continuous-control" ]]; then
   # This status confirms execution only. The recorded input is assessed locally.
