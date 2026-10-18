@@ -12,7 +12,9 @@ def rows():
 report={'physicalDeviceVerified':False,'sourceJwParityVerified':False,'scope':'Published CAD 0.21.0 input/visible zoom only, public sample fixture','device':kind}
 try:
  if kind=='iphone':
-  sim(['spawn',udid,str(Path('output/accessibility-setup').resolve()),'1'],'accessibility');time.sleep(20)
+  setup=sim(['spawn',udid,str(Path('output/accessibility-setup').resolve()),'1']+(['no-finger'] if os.environ.get('PROBE_NO_FINGER')=='1' else []),'accessibility')
+  if setup:raise RuntimeError('Accessibility setup failed; mouse test invalid')
+  time.sleep(20)
  sim(['terminate',udid,'com.apple.mobilesafari'],'terminate')
  sim(['openurl',udid,'http://127.0.0.1:8765/product?device='+channel],'open')
  for _ in range(45):
@@ -29,6 +31,6 @@ try:
  report['calibrationFailed']='unavailable; do not interpret' in (out/(kind+'-product-injector.log')).read_text()
  report['fourZoomChangesObserved']=len(report['views'])==5 and not report['errors'] and not report['calibrationFailed']
 finally:
- if kind=='iphone':sim(['spawn',udid,str(Path('output/accessibility-setup').resolve()),'0'],'restore',20)
+ if kind=='iphone':sim(['spawn',udid,str(Path('output/accessibility-setup').resolve()),'0']+(['restore-finger'] if os.environ.get('PROBE_NO_FINGER')=='1' else []),'restore',20)
  (out/(kind+'-product-result.json')).write_text(json.dumps(report,ensure_ascii=False,indent=2))
 print(json.dumps(report));raise SystemExit(0 if report.get('fourZoomChangesObserved') else 2)
