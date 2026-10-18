@@ -153,7 +153,7 @@ int main(int argc,const char **argv){@autoreleasepool{
     }
     settle(3);
     center();
-    for(uint32_t button=1;button<=2;button++){
+    for(uint32_t button=1;!getenv("PROBE_CHORDS_ONLY") && button<=2;button++){
         printf("BEGIN single-button %u\n",button);center();mouse(0,0,button);mouse(0,0,0);
     }
     const uint32_t chords[4][5]={{0,1,3,1,0},{0,1,3,2,0},{0,2,3,2,0},{0,2,3,1,0}};
@@ -162,7 +162,7 @@ int main(int argc,const char **argv){@autoreleasepool{
         for(int j=1;j<5;j++){mouse(0,0,chords[i][j]);if(chords[i][j]==3)for(int k=0;k<4;k++)mouse(12,10,3);if(j==3)settle(1);}
     }
     center();
-    if(scrollEvent&&wrapScroll){for(int d=-1;d<=1;d+=2){Event e=scrollEvent(kCFAllocatorDefault,mach_absolute_time(),0,d*120,0,0);if(e){deliver(wrapScroll(e,target));CFRelease(e);}}}
+    if(!getenv("PROBE_CHORDS_ONLY")&&scrollEvent&&wrapScroll){for(int d=-1;d<=1;d+=2){Event e=scrollEvent(kCFAllocatorDefault,mach_absolute_time(),0,d*120,0,0);if(e){deliver(wrapScroll(e,target));CFRelease(e);}}}
     mouse(0,0,0);settle(2);
     // Positive control only. Touch reception is never classified as mouse parity.
     typedef void *(*TouchFn)(CGPoint*,CGPoint*,uint32_t,NSUInteger,CGSize,uint32_t);
