@@ -1,0 +1,39 @@
+name: iPad published clock input experiment
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - apple-clock-probe/**
+      - .github/workflows/apple-clock-probe.yml
+permissions:
+  contents: read
+jobs:
+  ipad-clock:
+    runs-on: xcode-27
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare isolated clock-only overlay
+        run: |
+          cp apple-clock-probe/clock-injector.m apple-mouse-probe/injector.m
+          cp apple-clock-probe/clock-run.py apple-mouse-probe/product-run.py
+          cp apple-clock-probe/clock-receiver.py apple-mouse-probe/product-receiver.py
+      - name: Public CAD clock gestures on iPad Simulator
+        env:
+          PROBE_DEVICE: ipad
+          PROBE_HEADLESS: '1'
+          PROBE_RAW_MOUSE: '0'
+          PROBE_FOCUS: product-html
+          CLOCK_PUBLIC_URL: https://jw1036-rebuild-lab.ryu08ma.chatgpt.site/?v=0220
+          CLOCK_PUBLIC_BYTES: '256400'
+          CLOCK_PUBLIC_SHA256: 154e6344e7fe1c1168e834d5b1008549f65c1f601d03b41d6c0dea8394c6050c
+        run: bash apple-mouse-probe/run.sh
+      - name: Preserve observed state and actual input including failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ipad-clock-input-0220
+          path: apple-mouse-probe/output/
+          retention-days: 7
+          if-no-files-found: error
+
