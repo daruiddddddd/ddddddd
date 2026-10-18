@@ -172,8 +172,10 @@ int main(int argc,const char **argv){@autoreleasepool{
         center();if(calibrationFailed)break;printf("BEGIN chord %u %u %u %u %u\n",chords[i][0],chords[i][1],chords[i][2],chords[i][3],chords[i][4]);
         for(int j=1;j<5;j++){mouse(0,0,chords[i][j]);if(chords[i][j]==3)for(int k=0;k<4;k++)mouse(12,10,3);if(j==3)settle(1);}
     }
-    center();
-    if(!calibrationFailed&&!getenv("PROBE_CHORDS_ONLY")&&scrollEvent&&wrapScroll){for(int d=-1;d<=1;d+=2){Event e=scrollEvent(kCFAllocatorDefault,mach_absolute_time(),0,d*120,0,0);if(e){deliver(wrapScroll(e,target));CFRelease(e);}}}
+    // A button-only lifecycle trial ends at the last release. An unrelated
+    // wheel-position calibration must not prevent the relaunch comparison.
+    if(!getenv("PROBE_BUTTONS_ONLY"))center();
+    if(!calibrationFailed&&!getenv("PROBE_BUTTONS_ONLY")&&!getenv("PROBE_CHORDS_ONLY")&&scrollEvent&&wrapScroll){for(int d=-1;d<=1;d+=2){Event e=scrollEvent(kCFAllocatorDefault,mach_absolute_time(),0,d*120,0,0);if(e){deliver(wrapScroll(e,target));CFRelease(e);}}}
     mouse(0,0,0);settle(2);
     }
     if(calibrationFailed)printf("ABORT: no button, scroll, or touch injection after calibration failure\n");
@@ -184,4 +186,3 @@ int main(int argc,const char **argv){@autoreleasepool{
     printf("sent=%d rejected=%d callbacks=%d callbackErrors=%d; inspect Safari receiver logs before drawing any conclusion\n",sent,rejected,callbacks,callbackErrors);
     return calibrationFailed?12:rejected?9:0;
 }}
-
