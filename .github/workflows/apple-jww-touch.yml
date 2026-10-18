@@ -1,0 +1,38 @@
+name: JWW real drawings and Files picker on iPhone and iPad
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - apple-jww-touch/**
+      - .github/workflows/apple-jww-touch.yml
+permissions:
+  contents: read
+jobs:
+  touch:
+    strategy:
+      fail-fast: false
+      matrix:
+        device: [iphone, ipad]
+    runs-on: xcode-27
+    timeout-minutes: 22
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install Appium and Apple XCTest driver
+        run: |
+          npm install --global appium@3.8.0
+          appium driver install xcuitest@12.18.1
+      - name: Touch public HTML in real Simulator Safari
+        env:
+          PROBE_DEVICE: ${{ matrix.device }}
+        run: python3 apple-jww-touch/run.py
+      - name: Preserve results and screenshots including failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jww-touch-${{ matrix.device }}-0250
+          path: apple-jww-touch/output/
+          retention-days: 7
+          if-no-files-found: error

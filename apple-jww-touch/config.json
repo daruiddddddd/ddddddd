@@ -1,0 +1,41 @@
+{
+  "url": "https://jw1036-rebuild-lab.ryu08ma.chatgpt.site/?v=0250",
+  "version": "0.25.0-embedded",
+  "codeBytes": 240159,
+  "codeSha256": "067bf8cf337a33e51c6b3820653b2b2e69b9de5eac471e604a110fec438ea048",
+  "zip": "https://www.pref.aichi.jp/uploaded/attachment/629164.zip",
+  "samples": [
+    {
+      "name": "01-floor-detail.jww",
+      "sha256": "07c738eac3272c5b1bbc3d9bac736fbeb6353a22f006131a6bc59f1fb18fec76",
+      "bytes": 589925,
+      "original": "JWW/標準図31 3DK平面詳細図.jww",
+      "entities": 9126,
+      "display": 9352,
+      "omissions": []
+    },
+    {
+      "name": "02-building-detail.jww",
+      "sha256": "089f05180ca1961b1efaacc81bcaa3f74c9741f396b1269d0c65c29e78859695",
+      "bytes": 1452165,
+      "original": "JWW/標準図54 部分詳細図４.jww",
+      "entities": 26886,
+      "display": 26977,
+      "omissions": []
+    },
+    {
+      "name": "03-image.jww",
+      "sha256": "1c0a444110e7843c103f575149b7ddbdea93289d06c50cf212734050e278f4b6",
+      "bytes": 16972,
+      "url": "https://raw.githubusercontent.com/monozukuri-ai/ezjww/66af683c1e5c0b417a422352403a9ad6ced6b722/jws_samples/inputs/image.jww",
+      "entities": 3,
+      "display": 2,
+      "omissions": [
+        [
+          "貼付画像",
+          1
+        ]
+      ]
+    }
+  ]
+}
