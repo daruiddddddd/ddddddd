@@ -8,6 +8,7 @@ static NSFileHandle *logFile;
 static NSMutableSet<GCMouse *> *observedMice;
 static NSMutableDictionary<NSValue *,NSNumber *> *buttonStates;
 static dispatch_queue_t mouseQueue;
+static dispatch_queue_t logQueue;
 static WKWebView *bridgeView;
 static CGPoint bridgePoint;
 static BOOL hasBridgePoint=NO;
@@ -18,8 +19,12 @@ static void record(NSDictionary *data) {
     NSMutableDictionary *row=[data mutableCopy];
     row[@"uptime"]=@(NSProcessInfo.processInfo.systemUptime);
     row[@"wall"]=@(NSDate.date.timeIntervalSince1970);
-    NSData *bytes=[NSJSONSerialization dataWithJSONObject:row options:0 error:nil];
-    @synchronized(logFile) { [logFile writeData:bytes]; [logFile writeData:[@"\n" dataUsingEncoding:NSUTF8StringEncoding]]; }
+    // Preserve the callback-entry timestamp, but do not encode or write files
+    // on the input queue. A busy renderer/logger must not hold up mouse edges.
+    dispatch_async(logQueue,^{
+        NSData *bytes=[NSJSONSerialization dataWithJSONObject:row options:0 error:nil];
+        [logFile writeData:bytes]; [logFile writeData:[@"\n" dataUsingEncoding:NSUTF8StringEncoding]];
+    });
 }
 static void bridge(NSDictionary *data) {
     if(!bridgeView || !hasBridgePoint)return;
@@ -175,8 +180,16 @@ static void observeMouse(GCMouse *mouse) {
     NSString *path=[NSSearchPathForDirectoriesInDomains(NSDocumentDirectory,NSUserDomainMask,YES).firstObject stringByAppendingPathComponent:@"native-events.jsonl"];
     [NSFileManager.defaultManager createFileAtPath:path contents:nil attributes:nil];
     logFile=[NSFileHandle fileHandleForWritingAtPath:path]; observedMice=[NSMutableSet set]; buttonStates=[NSMutableDictionary dictionary];
+    logQueue=dispatch_queue_create("org.jwprobe.mouse-log",DISPATCH_QUEUE_SERIAL);
     mouseQueue=dispatch_queue_create("org.jwprobe.mouse-input",DISPATCH_QUEUE_SERIAL);
+    // SDL's UIKit backend uses the same dedicated serial HIGH-priority target.
+    // https://github.com/libsdl-org/SDL/blob/main/src/video/uikit/SDL_uikitevents.m
+    dispatch_set_target_queue(mouseQueue,dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH,0));
+    record(@{@"source":@"app",@"type":@"logging-policy",@"mouseQueue":@"serial-high",@"logQueue":@"separate-serial",@"timestamp":@"callback-entry"});
     return YES;
+}
+- (void)applicationWillTerminate:(UIApplication *)application {
+    dispatch_sync(logQueue,^{[logFile synchronizeFile];});
 }
 @end
 int main(int argc,char **argv) { @autoreleasepool { return UIApplicationMain(argc,argv,NSStringFromClass(ProbeApplication.class),NSStringFromClass(ProbeDelegate.class)); } }
