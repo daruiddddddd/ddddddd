@@ -45,12 +45,17 @@ while IFS=$'\t' read -r kind udid; do
   current_device="$udid"
   printf '\nStarting %s %s\n' "$kind" "$udid"
   python3 bounded.py 30 xcrun simctl boot "$udid" >"output/$kind-boot.log" 2>&1 || true
-  python3 bounded.py 180 xcrun simctl bootstatus "$udid" -b >>"output/$kind-boot.log" 2>&1 || true
-  cat "output/$kind-boot.log"
   printf 'PROBE_HEADLESS=%s\n' "${PROBE_HEADLESS:-0}" >>"output/$kind-boot.log"
   if [[ "${PROBE_HEADLESS:-0}" != "1" && -d "$(xcode-select -p)/Applications/Simulator.app" ]]; then
     python3 bounded.py 20 open -a "$(xcode-select -p)/Applications/Simulator.app" --args -CurrentDeviceUDID "$udid" >>"output/$kind-boot.log" 2>&1 || true
   fi
+  if ! python3 bounded.py 240 xcrun simctl bootstatus "$udid" -b >>"output/$kind-boot.log" 2>&1; then
+    printf 'Boot readiness failed; restarting this disposable simulator once\n' >>"output/$kind-boot.log"
+    python3 bounded.py 30 xcrun simctl shutdown "$udid" >>"output/$kind-boot.log" 2>&1 || true
+    python3 bounded.py 30 xcrun simctl boot "$udid" >>"output/$kind-boot.log" 2>&1 || true
+    python3 bounded.py 180 xcrun simctl bootstatus "$udid" -b >>"output/$kind-boot.log" 2>&1 || { cat "output/$kind-boot.log"; exit 21; }
+  fi
+  cat "output/$kind-boot.log"
   python3 bounded.py 20 xcrun simctl io "$udid" screenshot "output/$kind-before.png" >>"output/$kind-boot.log" 2>&1 || true
   python3 - "$kind" "$udid" <<'PY'
 import sys,time
@@ -235,3 +240,4 @@ elif [[ "${PROBE_FOCUS:-}" == "html-lifecycle" ]]; then
 else
   python3 assess.py
 fi
+
