@@ -57,7 +57,7 @@ try:
   if candidates:device=candidates[-1];runtime=runtimes[rid];break
  else:raise RuntimeError('No matching installed Simulator')
  udid=device['udid'];report['device']={**device,'runtime':runtime['version']};save()
- dev=command(['xcode-select','-p'],'developer').strip();hub=Path(dev)/'Applications/Device Hub.app'
+ dev=command(['xcode-select','-p'],'developer').strip();hub=Path(dev).parent/'Applications/DeviceHub.app'
  if hub.exists():command(['open','-a',str(hub)],'device-hub',check=False)
  command(['appium','--version'],'appium-version',timeout=60)
  command(['appium','driver','list','--installed'],'appium-drivers',timeout=60)
@@ -88,7 +88,7 @@ try:
  received=downs[-1];offset=[cal[0]-received['x']*scale,cal[1]-received['y']*scale];report['calibration']={'native':cal,'received':received,'offset':offset,'scale':scale};save()
  load();b=state();rect=b['rect'];vw=b['viewport'];left=max(rect['x']+20,0);right=min(rect['x']+rect['width']-20,vw['width']-25);top=max(rect['y']+50,180);bottom=min(rect['y']+rect['height']-40,vw['height']-60)
  if right-left<100 or bottom-top<160:raise RuntimeError('Insufficient visible canvas area')
- p=[left+20,top+30];q=[right-20,top+100];native([p]);native([q]);a=state();result('one-finger-two-taps-draw-line',b,a,a['count']==b['count']+1);screenshot('single-finger-line')
+ p=[left+20,top+30];q=[right-20,top+30];native([p]);native([q]);a=state();result('one-finger-two-taps-draw-line',b,a,a['count']==b['count']+1);screenshot('single-finger-line')
  # Right-mode one-finger taps must acquire the exact endpoints of the line just drawn.
  line=a['lines'][-1];tap_selector('[data-command="2"]');tap_selector('#finger-right');js('window.touchEvidence=[];return true;');b=state();native([[p[0]+2,p[1]+2]]);native([[q[0]+2,q[1]+2]]);a=state();new=a['lines'][-1];result('one-finger-right-mode-endpoint-snap',b,a,a['count']==b['count']+1 and all(abs(x-y)<1e-7 for x,y in zip(line,new)))
  for order in [0,1]:
@@ -111,4 +111,3 @@ finally:
   try:command(['xcrun','simctl','shutdown',udid],'shutdown',timeout=30,check=False)
   except Exception:pass
 print(json.dumps({'passed':report.get('passed'),'cases':len(report['cases']),'error':report.get('error')}));raise SystemExit(0 if report.get('passed') else 2)
-

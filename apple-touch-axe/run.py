@@ -63,7 +63,7 @@ const post=o=>fetch('/events',{method:'POST',body:JSON.stringify(o)}).catch(()=>
  cmd(['xcrun','simctl','boot',udid],'boot',check=False);cmd(['xcrun','simctl','bootstatus',udid,'-b'],'bootstatus',timeout=240)
  cmd(['xcrun','simctl','launch',udid,'com.apple.mobilesafari'],'safari-launch',timeout=120,check=False);cmd(['xcrun','simctl','openurl',udid,'http://127.0.0.1:8765/'],'safari-open',timeout=90);wait(lambda:latest.get('version')=='0.24.0-display',45)
  offset=[0,0];cal=[latest['screen']['width']*.55,latest['screen']['height']*.55];n=len(events);tap(*cal);wait(lambda:any(e['type']=='pointerdown' and e.get('pointerType')=='touch' and e.get('isTrusted') for e in events[n:]));e=next(e for e in events[n:] if e['type']=='pointerdown');offset=[cal[0]-e['x'],cal[1]-e['y']];report['calibration']={'input':cal,'received':e,'offset':offset};
- control('line');control('left');b=state();rect=b['rect'];left=max(rect['x']+20,0);right=min(rect['x']+rect['width']-20,b['viewport']['width']-25);top=max(rect['y']+50,180);p=[left+20,top+30];q=[right-20,top+100]
+ control('line');control('left');b=state();rect=b['rect'];left=max(rect['x']+20,0);right=min(rect['x']+rect['width']-20,b['viewport']['width']-25);top=max(rect['y']+50,180);p=[left+20,top+30];q=[right-20,top+30]
  tap(*p);tap(*q);wait(lambda:latest['count']!=b['count']);a=state();check('one-finger-draw-line',b,a,a['count']==b['count']+1);shot('draw-line')
  line=a['lines'][-1];control('line');control('right');b=state();tap(p[0]+2,p[1]+2);tap(q[0]+2,q[1]+2);wait(lambda:latest['count']!=b['count']);a=state();check('one-finger-right-endpoint-snap',b,a,a['count']==b['count']+1 and all(abs(x-y)<1e-7 for x,y in zip(line,a['lines'][-1])));shot('right-snap')
  control('line');control('left');b=state();x=left+30;y=top+140;ax(['swipe','--start-x',str(x+offset[0]),'--start-y',str(y+offset[1]),'--end-x',str(x+offset[0]),'--end-y',str(y-80+offset[1]),'--duration','0.8']);time.sleep(.7);a=state();check('one-finger-clock-AM0-text',b,a,a['command']==5 and a['count']==b['count']);shot('clock-text')
@@ -77,4 +77,3 @@ finally:
   except Exception as e:report['cleanupError']=str(e)
  save()
 print(json.dumps({'passed':report.get('passed'),'cases':len(report['cases']),'error':report.get('error')}));raise SystemExit(0 if report.get('passed') else 2)
-
