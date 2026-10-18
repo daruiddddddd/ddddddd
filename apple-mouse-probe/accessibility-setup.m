@@ -3,6 +3,7 @@
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 #import <objc/message.h>
+#import <objc/runtime.h>
 #import <dlfcn.h>
 int main(int argc,char **argv){@autoreleasepool{
     setvbuf(stdout,NULL,_IONBF,0);
@@ -20,9 +21,35 @@ int main(int argc,char **argv){@autoreleasepool{
     if(mode.length){
         SEL fg=NSSelectorFromString(@"assistiveTouchMouseBehavesLikeFinger");
         SEL fs=NSSelectorFromString(@"setAssistiveTouchMouseBehavesLikeFinger:");
-        if(![settings respondsToSelector:fg]||![settings respondsToSelector:fs]){printf("Mouse-as-finger selectors unavailable\n");return 6;}
+        id mouseSettings=settings;
+        if(![mouseSettings respondsToSelector:fg]||![mouseSettings respondsToSelector:fs]){
+            // New runtimes split accessibility state into AXCoreUtilities.
+            // Select only an object exposing the exact getter/setter pair.
+            dlopen("/System/Library/PrivateFrameworks/AXCoreUtilities.framework/AXCoreUtilities",RTLD_NOW|RTLD_GLOBAL);
+            Class core=NSClassFromString(@"AXCoreSettings");
+            if([core respondsToSelector:shared]){
+                id candidate=((id(*)(id,SEL))objc_msgSend)(core,shared);
+                if([candidate respondsToSelector:fg]&&[candidate respondsToSelector:fs])mouseSettings=candidate;
+            }
+        }
+        if(![mouseSettings respondsToSelector:fg]||![mouseSettings respondsToSelector:fs]){
+            printf("Mouse-as-finger selectors unavailable; read-only runtime inventory follows\n");
+            for(NSString *name in @[@"AXSettings",@"AXCoreSettings"]){
+                for(Class c=NSClassFromString(name);c && c!=NSObject.class;c=class_getSuperclass(c)){
+                    unsigned int count=0;Method *methods=class_copyMethodList(c,&count);
+                    for(unsigned int i=0;i<count;i++){
+                        NSString *selector=NSStringFromSelector(method_getName(methods[i]));
+                        if([selector rangeOfString:@"mouse" options:NSCaseInsensitiveSearch].location!=NSNotFound || [selector rangeOfString:@"finger" options:NSCaseInsensitiveSearch].location!=NSNotFound)
+                            printf("SETTING %s %s %s\n",class_getName(c),selector.UTF8String,method_getTypeEncoding(methods[i]));
+                    }
+                    free(methods);
+                }
+            }
+            return 6;
+        }
+        printf("Mouse settings class=%s\n",object_getClassName(mouseSettings));
         NSString *path=[NSTemporaryDirectory() stringByAppendingPathComponent:@"jwprobe-mouse-finger-original.json"];
-        BOOL before=((BOOL(*)(id,SEL))objc_msgSend)(settings,fg),requested=NO;
+        BOOL before=((BOOL(*)(id,SEL))objc_msgSend)(mouseSettings,fg),requested=NO;
         if([mode isEqualToString:@"no-finger"]){
             if([NSFileManager.defaultManager fileExistsAtPath:path]){printf("Original mouse setting already saved; refusing overwrite\n");return 7;}
             NSData *saved=[NSJSONSerialization dataWithJSONObject:@{@"original":@(before)} options:0 error:nil];
@@ -33,8 +60,8 @@ int main(int argc,char **argv){@autoreleasepool{
             if(!previous[@"original"]){printf("No saved mouse setting; refusing guessed restore\n");return 9;}
             requested=[previous[@"original"] boolValue];
         }else return 10;
-        ((void(*)(id,SEL,BOOL))objc_msgSend)(settings,fs,requested);
-        BOOL after=((BOOL(*)(id,SEL))objc_msgSend)(settings,fg);
+        ((void(*)(id,SEL,BOOL))objc_msgSend)(mouseSettings,fs,requested);
+        BOOL after=((BOOL(*)(id,SEL))objc_msgSend)(mouseSettings,fg);
         printf("MouseBehavesLikeFinger before=%d requested=%d after=%d mode=%s\n",before,requested,after,mode.UTF8String);
         if(after!=requested)return 11;
         if([mode isEqualToString:@"restore-finger"])[NSFileManager.defaultManager removeItemAtPath:path error:nil];
