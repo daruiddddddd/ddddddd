@@ -1,0 +1,38 @@
+name: Public JWW Safari touch test
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - apple-touch-probe/**
+      - .github/workflows/apple-touch-probe.yml
+permissions:
+  contents: read
+jobs:
+  touch:
+    strategy:
+      fail-fast: false
+      matrix:
+        device: [iphone, ipad]
+    runs-on: xcode-27
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install Appium and Apple XCTest driver
+        run: |
+          npm install --global appium@3.8.0
+          appium driver install xcuitest@12.18.1
+      - name: Touch public HTML in real Simulator Safari
+        env:
+          PROBE_DEVICE: ${{ matrix.device }}
+        run: python3 apple-touch-probe/run.py
+      - name: Preserve results and screenshots including failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: safari-touch-${{ matrix.device }}-0240
+          path: apple-touch-probe/output/
+          retention-days: 7
+          if-no-files-found: error
