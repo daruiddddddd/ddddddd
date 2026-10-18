@@ -1,0 +1,29 @@
+name: Safari one-finger AXe crosscheck
+on:
+  push:
+    paths: ['apple-touch-axe/**', '.github/workflows/apple-touch-axe.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  finger:
+    runs-on: xcode-27
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        device: [iphone, ipad]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Native finger input to hash-matched public CAD
+        env:
+          PROBE_DEVICE: ${{ matrix.device }}
+        run: python3 apple-touch-axe/run.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: axe-touch-${{ matrix.device }}-0240
+          path: |
+            apple-touch-axe/output/
+            !apple-touch-axe/output/axe-tools/**
+          retention-days: 7
