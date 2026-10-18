@@ -1,3 +1,33 @@
+FINAL BOUNDED RESULTS 2026-10-18 / PROJECT NOT COMPLETE
+
+Run37: https://github.com/daruiddddddd/ddddddd/actions/runs/39082764021
+Commit:0331593e4b1f0e532cf4257d5fd74d2aca889bd1
+Public UIKit/GCMouse API receiver, dedicated serial input callback queue,
+viewport alignment, and the existing CAD canvas pointer-capture policy.
+
+- iPad(A16)/iPadOS27.0 Simulator: all3 phases (initial, app relaunch with services
+  retained, service recreation) receive20/20 button edges and all4 stationary
+  partial-release/movement sequences. Existing CAD gesture-category replay passes.
+  Sent report -> API callback median/max milliseconds:
+  initial0.884/5.581; relaunch6.658/220.547; recreate1.583/11.932.
+  These are simulator timings, not hardware or rendered responsiveness measures.
+- iPhone17/iOS27.0 Simulator: initial20/20 and all4 sequences pass; relaunch15/20
+  with mixed touch, recreation0/20. Repeat reliability is NOT established.
+- Safari/WKWebView DOM-only does not deliver the required stationary partial
+  releases in the legacy-injector controls. Public standalone CAD HTML unchanged.
+- The native receiver is a diagnostic app candidate, not an approved switch to
+  installed-app distribution. No physical device, original clock timing, keyboard
+  modifier, Japanese input or full CAD parity is certified by these mouse tests.
+- UniversalHID runs35/36 do NOT preserve requested mask3 as simultaneous buttons
+  during movement. It is an experimental injection limitation/pipeline mismatch,
+  not independent proof that real devices cannot handle chords. Single mouse
+  input delivery is observed. Do not retain earlier broad corroboration claims.
+- Both run37 jobs completed every planned phase and shut down their simulators.
+  Their CI result remains red because the workflow ends with the Safari-only
+  gate; inspect phase recordings instead of equating colour to native success.
+
+The source below and previous run records are retained as experiment history.
+
 GitHub Actions / cloud Mac mouse-input experiment
 
 2026-10-18 subsequent findings: run34's CAD canvas capture/default handling
