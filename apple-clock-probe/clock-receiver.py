@@ -16,7 +16,7 @@ with urllib.request.urlopen(urllib.request.Request(url,headers={'User-Agent':'Mo
 prefix=downloaded[:length]
 digest=hashlib.sha256(prefix).hexdigest()
 if len(prefix)!=length or digest!=expected:raise RuntimeError('Published CAD hash mismatch; no input trial')
-(OUT/'clock-source.json').write_text(json.dumps({'url':url,'version':'0.22.0-clock','normalizedApplicationPrefixBytes':length,'sha256':digest,'physicalDeviceVerified':False,'scope':'Published code fetched and served on cloud loopback; not direct public URL on Apple hardware','instrumentation':'Passive DOM/jwTest observation; bundled public sample opening only'},indent=2))
+(OUT/'clock-source.json').write_text(json.dumps({'url':url,'version':'0.22.1-clock','normalizedApplicationPrefixBytes':length,'sha256':digest,'physicalDeviceVerified':False,'scope':'Published code fetched and served on cloud loopback; not direct public URL on Apple hardware','instrumentation':'Passive DOM/jwTest observation; bundled public sample opening only'},indent=2))
 SCRIPT=r'''<script>(()=>{
  const channel=new URLSearchParams(location.search).get('device'),session=crypto.randomUUID();
  const canvas=document.getElementById('canvas');let q=[],pending=null,sending=false,batch=0,ready=false;
@@ -48,4 +48,3 @@ class ClockHandler(Handler):
             self.send_response(200);self.send_header('Content-Type','application/json');self.end_headers();self.wfile.write(body)
         else:super().do_GET()
 ThreadingHTTPServer(('127.0.0.1',8765),ClockHandler).serve_forever()
-
