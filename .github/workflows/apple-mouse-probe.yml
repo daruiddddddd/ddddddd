@@ -36,7 +36,7 @@ jobs:
           PROBE_DEVICE: ${{ matrix.device }}
           PROBE_HEADLESS: ${{ contains(github.event.head_commit.message, '[headless]') && '1' || '0' }}
           PROBE_MOUSE_ONLY: ${{ contains(github.event.head_commit.message, '[mouse-only]') && '1' || '' }}
-          PROBE_FOCUS: ${{ contains(github.event.head_commit.message, '[continuous-control]') && 'continuous-control' || contains(github.event.head_commit.message, '[html-lifecycle]') && 'html-lifecycle' || contains(github.event.head_commit.message, '[native-universal]') && 'native-universal' || contains(github.event.head_commit.message, '[native-policy]') && 'native-policy' || contains(github.event.head_commit.message, '[native-repeat]') && 'native-repeat' || contains(github.event.head_commit.message, '[universal-only]') && 'universal-only' || '' }}
+          PROBE_FOCUS: ${{ contains(github.event.head_commit.message, '[product-html]') && 'product-html' || contains(github.event.head_commit.message, '[continuous-control]') && 'continuous-control' || contains(github.event.head_commit.message, '[html-lifecycle]') && 'html-lifecycle' || contains(github.event.head_commit.message, '[native-universal]') && 'native-universal' || contains(github.event.head_commit.message, '[native-policy]') && 'native-policy' || contains(github.event.head_commit.message, '[native-repeat]') && 'native-repeat' || contains(github.event.head_commit.message, '[universal-only]') && 'universal-only' || '' }}
           PROBE_DIRECT_BUTTONS: ${{ contains(github.event.head_commit.message, '[direct-buttons]') && '1' || '' }}
         run: bash apple-mouse-probe/run.sh
       - name: Preserve actual logs including failures
