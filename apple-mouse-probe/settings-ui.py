@@ -12,7 +12,10 @@ expected='7b76340b72e90d0f211bc7c4636f15009076eff07acef2f2b632b175debd8834'
 def command(args,label,timeout=40,env=None,check=True):
  global serial
  serial+=1
- p=subprocess.run(args,text=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=timeout,env=env)
+ try:p=subprocess.run(args,text=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=timeout,env=env)
+ except subprocess.TimeoutExpired as e:
+  decode=lambda x:x.decode('utf-8',errors='replace') if isinstance(x,bytes) else (x or '')
+  p=subprocess.CompletedProcess(args,124,decode(e.stdout),decode(e.stderr)+'\nTIMEOUT '+str(timeout)+' seconds')
  (out/f'ui-{serial:03d}-{label}.json').write_text(json.dumps({'args':args,'stdout':p.stdout,'stderr':p.stderr,'exit':p.returncode},indent=2))
  if check and p.returncode:raise RuntimeError(f'{label} exited {p.returncode}')
  return p
@@ -99,11 +102,16 @@ try:
   if after:raise RuntimeError('UI switch did not turn off')
   report['settingsUIChanged']=original
   report['inputCondition']='observed-touch-gestures-off'
- except LookupError as e:
+ except (LookupError,RuntimeError) as e:
+  # A UI inspection failure before any switch is changed must not suppress
+  # the independent mouse baseline. Never continue after an uncertain mutation.
+  if original is not None:raise
   report['settingsUnavailable']=str(e)
   report['inputCondition']='unchanged-settings-with-DeviceHub; NOT touch-gestures-off'
  sim(['io',udid,'screenshot',str(out/'settings-observed.png')],'settings-screenshot',check=False)
- env=dict(os.environ,PROBE_NO_FINGER='0',PROBE_RAW_MOUSE='1')
+ # Settings visibility required service creation above. Reuse these services
+ # from the first native segment instead of creating a second pair.
+ env=dict(os.environ,PROBE_NO_FINGER='0',PROBE_RAW_MOUSE='1',PROBE_REUSE_SERVICES='1')
  report['nativeExit']=command([sys.executable,'continuous-control.py',kind,udid],'native-raw',timeout=330,env=env,check=False).returncode
  env=dict(os.environ,PROBE_NO_FINGER='0',PROBE_RAW_MOUSE='0')
  report['safariExit']=command([sys.executable,'product-run.py',kind,udid],'safari-product',timeout=200,env=env,check=False).returncode
