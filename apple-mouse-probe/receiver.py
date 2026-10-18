@@ -1,5 +1,5 @@
 """Loopback-only Safari receiver. It never generates input events."""
-import json, threading, time
+import json, threading, time, os
 from pathlib import Path
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
@@ -82,6 +82,8 @@ class Handler(BaseHTTPRequestHandler):
                     state=STATE.setdefault(device,{})
                     if e.get('type')=='page-ready':state.update(width=e['width'],height=e['height'])
                     if e.get('pointerType')=='mouse' and e.get('isTrusted') and e.get('x',-1)>=0 and e.get('y',-1)>=0:state.update(x=e['x'],y=e['y'],buttons=e.get('buttons'),t=e.get('t'))
+                    if os.environ.get('PROBE_RAW_MOUSE')=='1' and e.get('origin')=='public-native-api' and e.get('api')=='GCMouse' and e.get('type')=='native-move':
+                        state.update(x=e['x'],y=e['y'],buttons=e['buttons'],t=e['t'],coordinateSource='GCMouse-relative')
                 if session:ACKED_BATCHES[key]=batch
             self.send_response(204);self.end_headers()
         except (ValueError,TypeError):
