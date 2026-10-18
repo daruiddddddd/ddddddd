@@ -12,19 +12,21 @@ STATE = {}
 HTML = r'''<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Apple mouse input receiver</title><style>html,body{margin:0;width:100%;height:100%;overflow:hidden;touch-action:none;font:16px system-ui;background:#edf5fb}canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none;outline:none}pre{position:absolute;pointer-events:none;white-space:pre-wrap;padding:20px}</style>
 <canvas id="surface" tabindex="0"></canvas><pre id="state">Waiting for real incoming Safari events. Simulator only.</pre><script>
-const device=new URLSearchParams(location.search).get('device');let queue=[],count=0;
+const params=new URLSearchParams(location.search),device=params.get('device'),policy=params.get('policy')||'cad';let queue=[],count=0;
 function flush(){if(!queue.length)return;const events=queue.splice(0);fetch('/events?device='+device,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(events)}).catch(()=>queue.unshift(...events));}
-queue.push({type:'page-ready',surface:'canvas-with-cad-pointer-capture',userAgent:navigator.userAgent,width:innerWidth,height:innerHeight,t:performance.now()});
+queue.push({type:'page-ready',surface:'canvas',policy,userAgent:navigator.userAgent,width:innerWidth,height:innerHeight,t:performance.now(),capabilities:{pointerLock:typeof document.body.requestPointerLock,pointerRawUpdate:'onpointerrawupdate' in window,coalescedEvents:typeof PointerEvent.prototype.getCoalescedEvents}});
 // Match the existing CAD's input surface policy without sending synthetic input.
 const surface=document.querySelector('#surface');
 for(const type of ['pointerdown','pointermove','pointerup'])surface.addEventListener(type,e=>{
- e.preventDefault();
- if(type==='pointerdown'){surface.focus({preventScroll:true});surface.setPointerCapture(e.pointerId);}
+ // Compare compatibility MouseEvents with the CAD's current suppression policy.
+ // This is a receiver-only experiment; it does not modify the CAD's controls.
+ if(policy==='cad')e.preventDefault();
+ if(type==='pointerdown'){surface.focus({preventScroll:true});if(policy!=='nocapture')surface.setPointerCapture(e.pointerId);}
 },{passive:false});
 // Native API transport is recorded separately. It never impersonates a trusted
 // browser PointerEvent or fabricates a button release from time or motion.
 window.nativeMouseInput=item=>{queue.push({...item,t:performance.now()});};
-for(const type of ['pointerdown','pointermove','pointerup','pointercancel','gotpointercapture','lostpointercapture','mousedown','mouseup','mousemove','wheel','contextmenu'])document.addEventListener(type,e=>{const item={type,pointerType:e.pointerType,button:e.button,buttons:e.buttons,x:e.clientX,y:e.clientY,deltaX:e.deltaX,deltaY:e.deltaY,isTrusted:e.isTrusted,t:performance.now()};queue.push(item);document.querySelector('#state').textContent='Received '+(++count)+' events\n'+JSON.stringify(item,null,2);if(type==='contextmenu'||type==='wheel')e.preventDefault();},{passive:false});
+for(const type of ['pointerdown','pointermove','pointerrawupdate','pointerup','pointercancel','gotpointercapture','lostpointercapture','mousedown','mouseup','mousemove','wheel','contextmenu'])document.addEventListener(type,e=>{const item={type,pointerType:e.pointerType,button:e.button,buttons:e.buttons,x:e.clientX,y:e.clientY,deltaX:e.deltaX,deltaY:e.deltaY,isTrusted:e.isTrusted,fromTouch:e.sourceCapabilities?.firesTouchEvents,eventTimestamp:e.timeStamp,t:performance.now()};queue.push(item);if(e.getCoalescedEvents)for(const c of e.getCoalescedEvents())queue.push({type:'coalesced',parent:type,pointerType:c.pointerType,button:c.button,buttons:c.buttons,x:c.clientX,y:c.clientY,isTrusted:c.isTrusted,timestamp:c.timeStamp,t:performance.now()});document.querySelector('#state').textContent='Received '+(++count)+' events\n'+JSON.stringify(item,null,2);if(type==='contextmenu'||type==='wheel')e.preventDefault();},{passive:false});
 setInterval(flush,200);flush();
 </script>'''
 
@@ -44,7 +46,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         parsed=urlparse(self.path)
         device=parse_qs(parsed.query).get('device',[''])[0]
-        allowed={k+p for k in ('iphone','ipad') for p in ('','-native','-universal','-locked','-trackpad','-off-before','-off-after','-native-on','-policy-default','-policy-direct','-universal-on','-repeat-first','-repeat-reused','-repeat-recreated','-universal-native-first','-universal-native-relaunch')}
+        allowed={k+p for k in ('iphone','ipad') for p in ('','-native','-universal','-locked','-trackpad','-off-before','-off-after','-native-on','-policy-default','-policy-direct','-universal-on','-repeat-first','-repeat-reused','-repeat-recreated','-universal-native-first','-universal-native-relaunch','-clean-first','-clean-relaunch','-html-cad','-html-compat','-html-nocapture')}
         if parsed.path!='/events' or device not in allowed:
             self.send_error(400);return
         size=int(self.headers.get('Content-Length','0'))
