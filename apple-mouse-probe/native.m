@@ -164,6 +164,20 @@ static void observeMouse(GCMouse *mouse) {
         record(@{@"source":@"app",@"type":@"lifecycle-sample",@"assistiveTouch":@(UIAccessibilityIsAssistiveTouchRunning()),@"mouseCount":@(GCMouse.mice.count),@"applicationState":@(UIApplication.sharedApplication.applicationState)});
     }];
     for(GCMouse *mouse in GCMouse.mice)observeMouse(mouse);
+    // Devices already connected at launch are bound before the scene is
+    // active. Reapply the public gesture preference at activation as a
+    // controlled lifecycle experiment; this does not generate input edges.
+    [NSNotificationCenter.defaultCenter addObserverForName:UIApplicationDidBecomeActiveNotification object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *n){
+        for(GCMouse *mouse in GCMouse.mice){
+            observeMouse(mouse);
+            GCMouseInput *input=mouse.mouseInput;
+            for(GCControllerButtonInput *button in @[input.leftButton?:NSNull.null,input.rightButton?:NSNull.null,input.middleButton?:NSNull.null]){
+                if((id)button==NSNull.null)continue;
+                if([NSProcessInfo.processInfo.arguments containsObject:@"--direct-buttons"])button.preferredSystemGestureState=GCSystemGestureStateDisabled;
+            }
+            record(@{@"source":@"diagnostic",@"type":@"active-policy-reapplied",@"mouseId":identityForMouse(mouse),@"leftPolicy":@(input.leftButton.preferredSystemGestureState),@"rightPolicy":@(input.rightButton.preferredSystemGestureState),@"polledButtons":@(buttons(input))});
+        }
+    }];
     // 50 Hz samples are diagnostic observations, never missing-edge repairs.
     [NSTimer scheduledTimerWithTimeInterval:.02 repeats:YES block:^(NSTimer *timer){
         for(GCMouse *mouse in GCMouse.mice){
@@ -232,4 +246,3 @@ static void observeMouse(GCMouse *mouse) {
 }
 @end
 int main(int argc,char **argv) { @autoreleasepool { return UIApplicationMain(argc,argv,NSStringFromClass(ProbeApplication.class),NSStringFromClass(ProbeDelegate.class)); } }
-
