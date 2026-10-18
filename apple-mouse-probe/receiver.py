@@ -85,6 +85,12 @@ class Handler(BaseHTTPRequestHandler):
                     native_feedback='-clean-' in device
                     if not native_feedback and not raw_feedback and e.get('pointerType')=='mouse' and e.get('isTrusted'):
                         state.update(x=e['x'],y=e['y'],buttons=e.get('buttons'),t=e.get('t'),positionValid=e['x']>=0 and e['y']>=0,positionWall=state.get('pageWall',time.time())+(e.get('t',0)-state.get('pageT',0))/1000,coordinateSource='trusted-DOM')
+                        # Browser performance.now and host wall time do not
+                        # share an origin. Use the measured queue age sent on
+                        # this batch, not a page-ready receipt-time offset.
+                        if isinstance(e.get('recordingAgeMs'),(int,float)) and e['recordingAgeMs']>=0:
+                            state['positionWall']=time.time()-e['recordingAgeMs']/1000
+                            state['freshnessBasis']='server-receipt-minus-browser-queue-age'
                     if e.get('origin')=='public-native-api':
                         native_move=e.get('type')=='native-move' and ((raw_feedback and e.get('api')=='GCMouse') or (native_feedback and not raw_feedback and e.get('api')=='UIKit'))
                         native_button=native_feedback and e.get('type')=='native-button' and e.get('api')=='GCMouse'
@@ -97,4 +103,3 @@ class Handler(BaseHTTPRequestHandler):
 
 if __name__=='__main__':
     ThreadingHTTPServer(('127.0.0.1',8765),Handler).serve_forever()
-
