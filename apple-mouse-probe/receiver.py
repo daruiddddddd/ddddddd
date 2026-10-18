@@ -81,8 +81,9 @@ class Handler(BaseHTTPRequestHandler):
                     f.write(json.dumps(e,ensure_ascii=False)+'\n')
                     state=STATE.setdefault(device,{})
                     if e.get('type')=='page-ready':state.update(width=e['width'],height=e['height'])
-                    if os.environ.get('PROBE_RAW_MOUSE')!='1' and e.get('pointerType')=='mouse' and e.get('isTrusted') and e.get('x',-1)>=0 and e.get('y',-1)>=0:state.update(x=e['x'],y=e['y'],buttons=e.get('buttons'),t=e.get('t'))
-                    if os.environ.get('PROBE_RAW_MOUSE')=='1' and e.get('origin')=='public-native-api' and e.get('api')=='GCMouse' and e.get('type')=='native-move':
+                    raw_feedback=os.environ.get('PROBE_RAW_MOUSE')=='1' or (os.environ.get('PROBE_FOCUS')=='settings-ui' and '-clean-' in device)
+                    if not raw_feedback and e.get('pointerType')=='mouse' and e.get('isTrusted') and e.get('x',-1)>=0 and e.get('y',-1)>=0:state.update(x=e['x'],y=e['y'],buttons=e.get('buttons'),t=e.get('t'))
+                    if raw_feedback and e.get('origin')=='public-native-api' and e.get('api')=='GCMouse' and e.get('type')=='native-move':
                         state.update(x=e['x'],y=e['y'],buttons=e['buttons'],t=e['t'],coordinateSource='GCMouse-relative')
                 if session:ACKED_BATCHES[key]=batch
             self.send_response(204);self.end_headers()
