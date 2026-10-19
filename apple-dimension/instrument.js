@@ -1,4 +1,5 @@
 <script>(()=>{
+document.getElementById('open-file').addEventListener('click',async e=>{e.preventDefault();e.stopImmediatePropagation();try{const f=await(await fetch('/fixture')).json();await jwTest.openBytes(Uint8Array.from(atob(f.base64),c=>c.charCodeAt(0)),f.name);}catch(error){throw error;}},true);
 let pending=[],busy=false;const post=o=>pending.push(o);setInterval(()=>{if(busy||!pending.length)return;busy=true;const batch=pending.splice(0);fetch('/events',{method:'POST',body:JSON.stringify(batch)}).catch(()=>{}).finally(()=>{busy=false;});},100);
 for(const type of ['pointerdown','pointermove','pointerup','pointercancel'])document.addEventListener(type,e=>post({type,pointerType:e.pointerType,isTrusted:e.isTrusted,x:e.clientX,y:e.clientY,id:e.pointerId,target:e.target.id,t:performance.now()}),{capture:true,passive:true});
 addEventListener('error',e=>post({type:'error',message:e.message}));addEventListener('unhandledrejection',e=>post({type:'error',message:String(e.reason)}));

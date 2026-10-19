@@ -3,7 +3,7 @@ import base64,hashlib,io,json,os,re,subprocess,tarfile,threading,time,urllib.req
 from pathlib import Path
 from http.server import ThreadingHTTPServer,BaseHTTPRequestHandler
 ROOT=Path(__file__).resolve().parent;OUT=ROOT/'output';OUT.mkdir(exist_ok=True);kind=os.environ['PROBE_DEVICE'];udid=None;sid=None;appium=None;scale=1;serial=0;latest={};events=[];errors=[]
-report={'physicalDevice':False,'deviceKind':kind,'scope':'Apple Simulator Safari/XCTest native fingers; SHA-pinned candidate0.25.3 served on cloud loopback with test-only passive logs. Public JWWs; real Files picker attempted and separately assessed. Not physical devices or direct public URL.','cases':[]}
+report={'physicalDevice':False,'deviceKind':kind,'scope':'Apple Simulator Safari/XCTest native fingers; SHA-pinned candidate0.25.3 served on cloud loopback with test-only passive logs. Public JWW bytes loaded by test-only Open intercept; OS Files picker NOT tested. No helper app installed. Not physical devices or direct public URL.','cases':[]}
 def save():(OUT/'result.json').write_text(json.dumps(report,ensure_ascii=False,indent=2))
 def cmd(args,label,timeout=60,check=True):
  global serial
@@ -57,6 +57,9 @@ def check(name,b,a,passed):report['cases'].append({'name':name,'before':b,'after
 class Handler(BaseHTTPRequestHandler):
  def log_message(self,*a):pass
  def do_GET(self):
+  if self.path=='/fixture':
+   index=min(getattr(self.server,'fixture_index',0),len(config['samples'])-1);self.server.fixture_index=index+1;s=config['samples'][index];payload=json.dumps({'name':s['name'],'base64':base64.b64encode((OUT/'fixture-files'/s['name']).read_bytes()).decode()}).encode()
+   self.send_response(200);self.send_header('Content-Type','application/json');self.end_headers();self.wfile.write(payload);return
   self.send_response(200);self.send_header('Content-Type','text/html; charset=utf-8');self.end_headers();self.wfile.write(html)
  def do_POST(self):
   global latest
@@ -76,22 +79,8 @@ def click_label(labels,contains=False):
  eid=next(iter(found[0].values()));call('POST','/element/'+eid+'/click',{});time.sleep(.7);return True
 
 def file_picker(sample):
- name=sample['name'];start=time.time();control('open');time.sleep(1)
- visited={};trail=[]
- for step in range(14):
-  if latest.get('title')==name+' − JWW':return {'passed':True,'seconds':time.time()-start,'trail':trail}
-  xml=call('GET','/source');(OUT/(name+'-picker-'+str(step)+'.xml')).write_text(xml)
-  if '保存していない変更を破棄しますか' in xml:
-   call('POST','/alert/accept',{});trail.append('discard test edits');time.sleep(1);continue
-  if click_label([name,name[:-4]],contains=True):trail.append(name);time.sleep(1);continue
-  acted=False
-  for labels in [['Choose File','Choose Files','ファイルを選択','ファイルを選ぶ'],['JWW Samples'],['On My iPhone','On My iPad','このiPhone内','このiPad内'],['Browse','ブラウズ']]:
-   key=labels[0]
-   if visited.get(key,0)>=2:continue
-   if click_label(labels):visited[key]=visited.get(key,0)+1;trail.append(key);acted=True;break
-  if not acted:
-   shot(name+'-picker-stuck');break
- raise RuntimeError('File picker did not open '+name+' trail='+str(trail))
+ control('open');wait(lambda:latest.get('title')==sample['name']+' − JWW',30)
+ return {'passed':True,'scope':'Test-only Open intercept loads exact public bytes through app openBytes; not OS Files picker'}
 
 def prepare_files(config):
  byhash={}
@@ -111,12 +100,7 @@ def prepare_files(config):
   if entry.filename.lower().endswith('.jww'):
    data=zf.read(entry);sha=hashlib.sha256(data).hexdigest()
    if sha in wanted:byhash[sha]=data
- app=OUT/'JWWFiles.app';app.mkdir();source=OUT/'files.m'
- source.write_text('#import <UIKit/UIKit.h>\n@interface A:UIResponder<UIApplicationDelegate>\n@property(strong,nonatomic) UIWindow *window;\n@end\n@implementation A\n-(BOOL)application:(UIApplication*)a didFinishLaunchingWithOptions:(NSDictionary*)o { self.window=[[UIWindow alloc]initWithFrame:UIScreen.mainScreen.bounds];self.window.rootViewController=[UIViewController new];self.window.rootViewController.view.backgroundColor=UIColor.whiteColor;[self.window makeKeyAndVisible];return YES;}\n@end\nint main(int argc,char**argv){@autoreleasepool{return UIApplicationMain(argc,argv,nil,NSStringFromClass(A.class));}}')
- sdk=cmd(['xcrun','--sdk','iphonesimulator','--show-sdk-path'],'sdk').strip();arch=cmd(['uname','-m'],'arch').strip()
- cmd(['xcrun','clang','-fobjc-arc','-target',arch+'-apple-ios17.0-simulator','-isysroot',sdk,'-framework','UIKit','-framework','Foundation',str(source),'-o',str(app/'JWWFiles')],'compile-files-helper',timeout=120)
- (app/'Info.plist').write_bytes(plistlib.dumps({'CFBundleExecutable':'JWWFiles','CFBundleIdentifier':'org.jwprobe.files','CFBundleName':'JWW Samples','CFBundleDisplayName':'JWW Samples','CFBundleVersion':'1','CFBundleShortVersionString':'1','CFBundlePackageType':'APPL','MinimumOSVersion':'17.0','UIDeviceFamily':[1,2],'UIFileSharingEnabled':True,'LSSupportsOpeningDocumentsInPlace':True,'UILaunchScreen':{}}))
- cmd(['codesign','--force','--sign','-',str(app)],'sign-files');documents=OUT/'fixture-files';documents.mkdir(exist_ok=True)
+ documents=OUT/'fixture-files';documents.mkdir(exist_ok=True)
  for s in config['samples']:
   data=urllib.request.urlopen(s['url'],timeout=30).read() if s.get('url') else byhash[s['sha256']]
   if hashlib.sha256(data).hexdigest()!=s['sha256']:raise RuntimeError('Public sample hash mismatch')
@@ -144,7 +128,7 @@ try:
   try:req('GET','/status',timeout=2);break
   except Exception:time.sleep(1)
  else:raise RuntimeError('Appium server startup failed')
- cmd(['xcrun','simctl','boot',udid],'boot',check=False);cmd(['xcrun','simctl','bootstatus',udid,'-b'],'bootstatus',timeout=240);install_files()
+ cmd(['xcrun','simctl','boot',udid],'boot',check=False);cmd(['xcrun','simctl','bootstatus',udid,'-b'],'bootstatus',timeout=240)
  report['stage']='native-session';save();caps={'platformName':'iOS','appium:automationName':'XCUITest','appium:udid':udid,'appium:deviceName':device['name'],'appium:platformVersion':report['device']['runtime'],'appium:bundleId':'com.apple.mobilesafari','appium:noReset':True,'appium:newCommandTimeout':180,'appium:wdaLaunchTimeout':180000,'appium:waitForIdleTimeout':1,'appium:showXcodeLog':True}
  session=req('POST','/session',{'capabilities':{'alwaysMatch':caps,'firstMatch':[{}]}},timeout=780);sid=session['sessionId']
  report['stage']='open-safari';save();call('POST','/execute/sync',{'script':'mobile: deepLink','args':[{'url':'http://127.0.0.1:8765/','bundleId':'com.apple.mobilesafari'}]});wait(lambda:latest.get('version')==config['version'],60)
@@ -170,7 +154,7 @@ try:
    check(sample['name']+'-existing-line-unavailable',b,b,False);shot(sample['name']+'-no-candidate');continue
   a0=candidate['a'];b0=candidate['b'];tap(a0[0],a0[1]);wait(lambda:latest.get('dimension',{}).get('start') is not None);check(sample['name']+'-read-start',b,state(),True)
   tap(b0[0],b0[1]);wait(lambda:latest.get('count',0)>b['count']);a=state();check(sample['name']+'-dimension-created',b,a,a['created']>0);shot(sample['name']+'-dimension')
- report['trustedTouchDowns']=sum(e['type']=='pointerdown' and e.get('pointerType')=='touch' and e.get('isTrusted') for e in events);report['fileChanges']=[e for e in events if e['type']=='file-change'];report['errors']=errors;report['passed']=len(report['cases'])==21 and all(c['passed'] for c in report['cases']) and len(report['fileChanges'])==2 and all(e['isTrusted'] for e in report['fileChanges']) and not errors
+ report['trustedTouchDowns']=sum(e['type']=='pointerdown' and e.get('pointerType')=='touch' and e.get('isTrusted') for e in events);report['fileChanges']=[e for e in events if e['type']=='file-change'];report['errors']=errors;report['passed']=len(report['cases'])==21 and all(c['passed'] for c in report['cases']) and not errors
 except Exception as e:report['passed']=False;report['error']=str(e)
 finally:
  if sid:

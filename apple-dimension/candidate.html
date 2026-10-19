@@ -1436,7 +1436,7 @@ function prompt(){
 function unavailable(name){if(excludedNames.has(String(name).replace(/\(&.\)/g,''))){message(`${name}は使用できません。`);return;}message(`${name}は使用できません。`);}
 function runCommand(code,name,fromGesture=false){
  if(busy&&!fromGesture)return;
- if(code===97){if(dirty&&!confirm('保存していない変更を破棄しますか？'))return;openBytes(createBlankJww(),'無題').then(()=>runCommand(2)).catch(e=>message(e.message));return;}
+ if(code===97){if(dirty&&!confirm('保存していない変更を破棄しますか？'))return;openBytes(createBlankJww(),'無題').then(()=>{command=0;runCommand(2);}).catch(e=>message(e.message));return;}
  if(code===98){$('file').click();return;}
  if(code===100){save();return;}
  if(code===110){openDimensionSettings();return;}
