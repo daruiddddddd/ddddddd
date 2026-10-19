@@ -3,7 +3,7 @@ import base64,hashlib,io,json,os,re,subprocess,tarfile,threading,time,urllib.req
 from pathlib import Path
 from http.server import ThreadingHTTPServer,BaseHTTPRequestHandler
 ROOT=Path(__file__).resolve().parent;OUT=ROOT/'output';OUT.mkdir(exist_ok=True);kind=os.environ['PROBE_DEVICE'];udid=None;sid=None;appium=None;scale=1;serial=0;latest={};events=[];errors=[]
-report={'physicalDevice':False,'deviceKind':kind,'scope':'Apple Simulator Safari/XCTest native fingers; SHA-pinned public0.25.2 served on cloud loopback with test-only passive logs. Public JWWs; real Files picker attempted and separately assessed. Not physical devices or direct public URL.','cases':[]}
+report={'physicalDevice':False,'deviceKind':kind,'scope':'Apple Simulator Safari/XCTest native fingers; SHA-pinned candidate0.25.3 served on cloud loopback with test-only passive logs. Public JWWs; real Files picker attempted and separately assessed. Not physical devices or direct public URL.','cases':[]}
 def save():(OUT/'result.json').write_text(json.dumps(report,ensure_ascii=False,indent=2))
 def cmd(args,label,timeout=60,check=True):
  global serial
@@ -149,6 +149,15 @@ try:
  session=req('POST','/session',{'capabilities':{'alwaysMatch':caps,'firstMatch':[{}]}},timeout=780);sid=session['sessionId']
  report['stage']='open-safari';save();call('POST','/execute/sync',{'script':'mobile: deepLink','args':[{'url':'http://127.0.0.1:8765/','bundleId':'com.apple.mobilesafari'}]});wait(lambda:latest.get('version')==config['version'],60)
  scale=latest['viewport']['scale'];offset=[0,0];cal=[latest['screen']['width']*.55,latest['screen']['height']*.55];n=len(events);native([[cal[0]/scale,cal[1]/scale]]);wait(lambda:any(e['type']=='pointerdown' and e.get('pointerType')=='touch' and e.get('isTrusted') for e in events[n:]));e=next(e for e in events[n:] if e['type']=='pointerdown');offset=[cal[0]-e['x']*scale,cal[1]-e['y']*scale];report['calibration']={'input':cal,'received':e,'offset':offset};report['stage']='files-and-touch';save()
+ control('dimension');control('line');control('left');wait(lambda:latest.get('command')==2);b=state();rect=b['rect'];x1=rect['x']+rect['width']*.2;x2=rect['x']+rect['width']*.8;y=rect['y']+rect['height']*.4
+ check('startup-empty',{},b,b['count']==0)
+ tap(x1,y);tap(x2,y);wait(lambda:latest.get('count')==1);check('startup-line',b,state(),True)
+ control('dimension');wait(lambda:latest.get('command')==7);control('toggle');wait(lambda:latest.get('angle')=='90');check('startup-angle',{},state(),True);control('toggle');wait(lambda:latest.get('angle')=='0')
+ rect=latest['rect'];x=rect['x']+rect['width']*.5;y=rect['y']+rect['height']*.6
+ tap(x,y);wait(lambda:latest.get('dimension',{}).get('extension') is not None);check('startup-extension',{},state(),True)
+ tap(x,y+35);wait(lambda:latest.get('dimension',{}).get('position') is not None);check('startup-position',{},state(),True)
+ b=state();candidate=b['candidate'];tap(*candidate['a']);wait(lambda:latest.get('dimension',{}).get('start') is not None);check('startup-read-start',{},state(),True)
+ tap(*candidate['b']);wait(lambda:latest.get('count',0)>1);check('startup-dimension',b,state(),latest['created']>0);shot('startup-dimension')
  for sample in config['samples']:
   picker=file_picker(sample);wait(lambda:latest.get('display')==sample['display']);report.setdefault('filePicker',[]).append({'name':sample['name'],**picker});b=state();check(sample['name']+'-open',{},b,b['count']==sample['entities'] and b['omissions']==sample['omissions']);shot(sample['name']+'-opened')
   control('left');control('dimension');wait(lambda:latest.get('command')==7);b=state();check(sample['name']+'-activate',{},b,b['dimensionVisible'])
@@ -161,7 +170,7 @@ try:
    check(sample['name']+'-existing-line-unavailable',b,b,False);shot(sample['name']+'-no-candidate');continue
   a0=candidate['a'];b0=candidate['b'];tap(a0[0],a0[1]);wait(lambda:latest.get('dimension',{}).get('start') is not None);check(sample['name']+'-read-start',b,state(),True)
   tap(b0[0],b0[1]);wait(lambda:latest.get('count',0)>b['count']);a=state();check(sample['name']+'-dimension-created',b,a,a['created']>0);shot(sample['name']+'-dimension')
- report['trustedTouchDowns']=sum(e['type']=='pointerdown' and e.get('pointerType')=='touch' and e.get('isTrusted') for e in events);report['fileChanges']=[e for e in events if e['type']=='file-change'];report['errors']=errors;report['passed']=len(report['cases'])==14 and all(c['passed'] for c in report['cases']) and len(report['fileChanges'])==2 and all(e['isTrusted'] for e in report['fileChanges']) and not errors
+ report['trustedTouchDowns']=sum(e['type']=='pointerdown' and e.get('pointerType')=='touch' and e.get('isTrusted') for e in events);report['fileChanges']=[e for e in events if e['type']=='file-change'];report['errors']=errors;report['passed']=len(report['cases'])==21 and all(c['passed'] for c in report['cases']) and len(report['fileChanges'])==2 and all(e['isTrusted'] for e in report['fileChanges']) and not errors
 except Exception as e:report['passed']=False;report['error']=str(e)
 finally:
  if sid:

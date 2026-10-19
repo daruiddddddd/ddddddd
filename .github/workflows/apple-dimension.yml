@@ -33,7 +33,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: dimension-${{ matrix.device }}-0252
+          name: dimension-${{ matrix.device }}-0253
           path: apple-dimension/output/
           retention-days: 7
           if-no-files-found: error
