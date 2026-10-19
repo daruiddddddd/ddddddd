@@ -1,0 +1,47 @@
+{
+  "url": "https://jw1036-rebuild-lab.ryu08ma.chatgpt.site/?v=0252",
+  "version": "0.25.2-mobile",
+  "codeBytes": 243034,
+  "codeSha256": "0eb5d8714e2512ef9cd6dbc3bd84865b4d527b632c0a492530d829b63f47c2cf",
+  "zip": "https://www.pref.aichi.jp/uploaded/attachment/629164.zip",
+  "samples": [
+    {
+      "name": "01-floor-detail.jww",
+      "sha256": "07c738eac3272c5b1bbc3d9bac736fbeb6353a22f006131a6bc59f1fb18fec76",
+      "bytes": 589925,
+      "original": "JWW/標準図31 3DK平面詳細図.jww",
+      "entities": 9126,
+      "display": 9352,
+      "omissions": []
+    },
+    {
+      "name": "02-building-detail.jww",
+      "sha256": "089f05180ca1961b1efaacc81bcaa3f74c9741f396b1269d0c65c29e78859695",
+      "bytes": 1452165,
+      "original": "JWW/標準図54 部分詳細図４.jww",
+      "entities": 26886,
+      "display": 26977,
+      "omissions": []
+    }
+  ],
+  "fallbackSamples": [
+    {
+      "name": "01-atelier.jww",
+      "sha256": "90d77411ac194aca858518f00b44088f63b8f9b71a0346fc80f76600d1aca98d",
+      "bytes": 99786,
+      "entities": 1704,
+      "display": 1704,
+      "omissions": [],
+      "lha": "https://www.tmk-s.com/jww/dl/a_l.lzh"
+    },
+    {
+      "name": "02-shop.jww",
+      "sha256": "456132466e07d23fc6ccd356ea3364ed5935cffcebd109fad01b3d35e682477f",
+      "bytes": 250182,
+      "entities": 4632,
+      "display": 4632,
+      "omissions": [],
+      "lha": "https://www.tmk-s.com/jww/dl/b_l.lzh"
+    }
+  ]
+}
